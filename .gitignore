@@ -1,0 +1,22 @@
+# Local environment
+.env
+
+# Codex/local assistant files
+.codex/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# .NET
+backend/bin/
+backend/obj/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+docs/
