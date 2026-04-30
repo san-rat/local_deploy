@@ -1,0 +1,314 @@
+.app-shell {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.hero-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: stretch;
+  padding: 28px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.intro {
+  max-width: 680px;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.status-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.status-panel div,
+.summary-grid div,
+.task-form,
+.task-list,
+.task-card,
+.notice,
+.empty-state {
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.status-panel div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px;
+}
+
+.status-label,
+.summary-grid span,
+.task-meta,
+.list-header p {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.ok {
+  color: var(--success);
+}
+
+.warn {
+  color: var(--warning);
+}
+
+.notice {
+  margin-top: 18px;
+  padding: 14px 16px;
+  color: var(--danger);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.summary-grid div {
+  padding: 18px;
+}
+
+.summary-grid strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 1.7rem;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.task-form,
+.task-list {
+  padding: 20px;
+}
+
+.task-form {
+  display: grid;
+  gap: 16px;
+}
+
+.task-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  padding: 11px 12px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--button-bg);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 10px 14px;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.primary-action {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+
+.ghost-action {
+  background: transparent;
+}
+
+.danger-action {
+  color: var(--danger);
+}
+
+.list-header,
+.task-main,
+.task-meta,
+.task-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.list-header,
+.task-main {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.task-stack {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.task-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+}
+
+.task-card h3 {
+  margin: 0 0 8px;
+}
+
+.task-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.task-meta {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.task-actions {
+  flex-wrap: wrap;
+}
+
+.status,
+.priority {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.status-pending {
+  background: var(--status-pending-bg);
+  color: var(--status-pending);
+}
+
+.status-in-progress {
+  background: var(--status-progress-bg);
+  color: var(--status-progress);
+}
+
+.status-completed {
+  background: var(--status-completed-bg);
+  color: var(--status-completed);
+}
+
+.status-blocked {
+  background: var(--status-blocked-bg);
+  color: var(--status-blocked);
+}
+
+.priority-low,
+.priority-medium,
+.priority-high,
+.priority-critical {
+  background: var(--priority-bg);
+}
+
+.priority-low {
+  color: var(--success);
+}
+
+.priority-medium {
+  color: var(--accent);
+}
+
+.priority-high {
+  color: var(--warning);
+}
+
+.priority-critical {
+  color: var(--danger);
+}
+
+.empty-state {
+  margin-top: 16px;
+  padding: 20px;
+  color: var(--muted);
+}
+
+@media (max-width: 860px) {
+  .hero-section,
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell {
+    width: min(100% - 20px, 1180px);
+    padding-top: 20px;
+  }
+
+  .hero-section,
+  .task-form,
+  .task-list {
+    padding: 16px;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .list-header,
+  .task-main {
+    display: grid;
+  }
+}

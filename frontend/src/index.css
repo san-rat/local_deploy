@@ -1,0 +1,91 @@
+:root {
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --surface: #ffffff;
+  --input-bg: #ffffff;
+  --text: #172033;
+  --muted: #667085;
+  --border: #d9dee8;
+  --accent: #2563eb;
+  --success: #0f766e;
+  --warning: #b45309;
+  --danger: #b42318;
+  --button-bg: #ffffff;
+  --focus: rgba(37, 99, 235, 0.24);
+  --status-pending: #7c2d12;
+  --status-pending-bg: #ffedd5;
+  --status-progress: #1d4ed8;
+  --status-progress-bg: #dbeafe;
+  --status-completed: #047857;
+  --status-completed-bg: #d1fae5;
+  --status-blocked: #b42318;
+  --status-blocked-bg: #fee4e2;
+  --priority-bg: #f2f4f7;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--text);
+  line-height: 1.16;
+}
+
+h1 {
+  margin: 0 0 14px;
+  font-size: clamp(2rem, 5vw, 3.6rem);
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+h3 {
+  font-size: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101418;
+    --panel: #171c22;
+    --surface: #1d232b;
+    --input-bg: #111820;
+    --text: #f3f6fb;
+    --muted: #a5afbd;
+    --border: #303946;
+    --accent: #60a5fa;
+    --success: #5eead4;
+    --warning: #fbbf24;
+    --danger: #f87171;
+    --button-bg: #141a21;
+    --focus: rgba(96, 165, 250, 0.28);
+    --status-pending: #fed7aa;
+    --status-pending-bg: #431407;
+    --status-progress: #bfdbfe;
+    --status-progress-bg: #172554;
+    --status-completed: #a7f3d0;
+    --status-completed-bg: #064e3b;
+    --status-blocked: #fecaca;
+    --status-blocked-bg: #7f1d1d;
+    --priority-bg: #27303b;
+  }
+}
