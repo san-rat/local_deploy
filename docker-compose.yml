@@ -1,4 +1,17 @@
 services:
+  nginx:
+    build:
+      context: ./frontend
+    container_name: localdeploy-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    networks:
+      - localdeploy_network
+
   backend:
     build:
       context: ./backend

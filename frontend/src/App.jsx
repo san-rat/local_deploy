@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const API_BASE_URL = 'http://localhost:8080'
+const API_BASE_URL = ''
 const STATUS_FLOW = ['Pending', 'In Progress', 'Completed', 'Blocked']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Critical']
 
