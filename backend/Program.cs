@@ -45,6 +45,8 @@ if (swaggerEnabled)
 
 app.UseCors("LocalFrontend");
 
+var logger = app.Logger;
+
 var allowedStatuses = new HashSet<string>(StringComparer.Ordinal)
 {
     "Pending",
@@ -85,8 +87,14 @@ TaskItem ReadTask(NpgsqlDataReader reader)
     );
 }
 
-IResult ValidationError(IReadOnlyList<string> details)
+IResult ValidationError(string endpointName, IReadOnlyList<string> details)
 {
+    logger.LogWarning(
+        "Validation failed for {EndpointName}: {ValidationDetails}",
+        endpointName,
+        string.Join("; ", details)
+    );
+
     return Results.BadRequest(new ValidationErrorResponse("Validation failed", details));
 }
 
@@ -173,6 +181,8 @@ app.MapGet("/health", async () =>
         await using var connection = new NpgsqlConnection(GetConnectionString());
         await connection.OpenAsync();
 
+        logger.LogInformation("Health check requested. Database status: {DatabaseStatus}", "connected");
+
         return Results.Ok(new
         {
             status = "running",
@@ -180,8 +190,14 @@ app.MapGet("/health", async () =>
             database = "connected"
         });
     }
-    catch
+    catch (Exception exception)
     {
+        logger.LogWarning(
+            exception,
+            "Health check requested. Database status: {DatabaseStatus}",
+            "disconnected"
+        );
+
         return Results.Ok(new
         {
             status = "running",
@@ -222,6 +238,8 @@ app.MapGet("/api/tasks", async () =>
         tasks.Add(ReadTask(reader));
     }
 
+    logger.LogInformation("Task list requested. Returned {TaskCount} tasks", tasks.Count);
+
     return Results.Ok(tasks);
 })
 .WithName("GetTasks")
@@ -253,10 +271,16 @@ app.MapGet("/api/tasks/{id:int}", async (int id) =>
 
     if (!await reader.ReadAsync())
     {
+        logger.LogWarning("Task requested. Task ID {TaskId} was not found", id);
+
         return Results.NotFound();
     }
 
-    return Results.Ok(ReadTask(reader));
+    var task = ReadTask(reader);
+
+    logger.LogInformation("Task requested. Task ID {TaskId} was found", id);
+
+    return Results.Ok(task);
 })
 .WithName("GetTaskById")
 .WithTags("Tasks")
@@ -273,7 +297,7 @@ app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
 
     if (validationErrors.Count > 0)
     {
-        return ValidationError(validationErrors);
+        return ValidationError("CreateTask", validationErrors);
     }
 
     await using var connection = new NpgsqlConnection(GetConnectionString());
@@ -298,6 +322,13 @@ app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
 
     var task = ReadTask(reader);
 
+    logger.LogInformation(
+        "Task created. Task ID {TaskId}, Status {TaskStatus}, Priority {TaskPriority}",
+        task.Id,
+        task.Status,
+        task.Priority
+    );
+
     return Results.Created($"/api/tasks/{task.Id}", task);
 })
 .WithName("CreateTask")
@@ -315,7 +346,7 @@ app.MapPut("/api/tasks/{id:int}", async (int id, UpdateTaskRequest request) =>
 
     if (validationErrors.Count > 0)
     {
-        return ValidationError(validationErrors);
+        return ValidationError("UpdateTask", validationErrors);
     }
 
     await using var connection = new NpgsqlConnection(GetConnectionString());
@@ -346,10 +377,21 @@ app.MapPut("/api/tasks/{id:int}", async (int id, UpdateTaskRequest request) =>
 
     if (!await reader.ReadAsync())
     {
+        logger.LogWarning("Task update requested. Task ID {TaskId} was not found", id);
+
         return Results.NotFound();
     }
 
-    return Results.Ok(ReadTask(reader));
+    var task = ReadTask(reader);
+
+    logger.LogInformation(
+        "Task updated. Task ID {TaskId}, Status {TaskStatus}, Priority {TaskPriority}",
+        task.Id,
+        task.Status,
+        task.Priority
+    );
+
+    return Results.Ok(task);
 })
 .WithName("UpdateTask")
 .WithTags("Tasks")
@@ -377,9 +419,16 @@ app.MapDelete("/api/tasks/{id:int}", async (int id) =>
 
     var deletedRows = await command.ExecuteNonQueryAsync();
 
-    return deletedRows == 0
-        ? Results.NotFound()
-        : Results.NoContent();
+    if (deletedRows == 0)
+    {
+        logger.LogWarning("Task delete requested. Task ID {TaskId} was not found", id);
+
+        return Results.NotFound();
+    }
+
+    logger.LogInformation("Task deleted. Task ID {TaskId}", id);
+
+    return Results.NoContent();
 })
 .WithName("DeleteTask")
 .WithTags("Tasks")

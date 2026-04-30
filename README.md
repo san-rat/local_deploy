@@ -189,6 +189,14 @@ docker compose logs database
 docker compose logs nginx
 ```
 
+Follow backend logs while testing API requests:
+
+```bash
+docker compose logs -f backend
+```
+
+The backend writes readable application logs for health checks, task list/detail requests, create/update/delete actions, validation failures, missing task IDs, and database health failures.
+
 ## Screenshots
 
 Add portfolio screenshots to `docs/screenshots/`:
