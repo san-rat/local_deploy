@@ -30,6 +30,7 @@ services:
       DB_USER: ${DB_USER:-localdeploy_user}
       DB_PASSWORD: ${DB_PASSWORD:-localdeploy_password}
       ASPNETCORE_URLS: http://+:8080
+      ENABLE_SWAGGER: "true"
     depends_on:
       database:
         condition: service_healthy

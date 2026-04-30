@@ -1,9 +1,18 @@
+using Microsoft.OpenApi.Models;
 using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "LocalDeploy Lab API",
+        Version = "v1",
+        Description = "Task management API for the Dockerized LocalDeploy Lab home lab."
+    });
+});
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("LocalFrontend", policy =>
@@ -17,10 +26,21 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+var swaggerEnabled = app.Environment.IsDevelopment()
+    || string.Equals(
+        Environment.GetEnvironmentVariable("ENABLE_SWAGGER"),
+        "true",
+        StringComparison.OrdinalIgnoreCase
+    );
+
+if (swaggerEnabled)
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options =>
+    {
+        options.RoutePrefix = "swagger";
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "LocalDeploy Lab API v1");
+    });
 }
 
 app.UseCors("LocalFrontend");
@@ -72,6 +92,14 @@ app.MapGet("/health", async () =>
             database = "disconnected"
         });
     }
+})
+.WithName("GetHealth")
+.WithTags("Health")
+.WithOpenApi(operation =>
+{
+    operation.Summary = "Check API and database health";
+    operation.Description = "Returns API status and whether the backend can connect to PostgreSQL.";
+    return operation;
 });
 
 app.MapGet("/api/tasks", async () =>
@@ -98,6 +126,14 @@ app.MapGet("/api/tasks", async () =>
     }
 
     return Results.Ok(tasks);
+})
+.WithName("GetTasks")
+.WithTags("Tasks")
+.WithOpenApi(operation =>
+{
+    operation.Summary = "List tasks";
+    operation.Description = "Returns all task records ordered by ID.";
+    return operation;
 });
 
 app.MapGet("/api/tasks/{id:int}", async (int id) =>
@@ -124,6 +160,14 @@ app.MapGet("/api/tasks/{id:int}", async (int id) =>
     }
 
     return Results.Ok(ReadTask(reader));
+})
+.WithName("GetTaskById")
+.WithTags("Tasks")
+.WithOpenApi(operation =>
+{
+    operation.Summary = "Get one task";
+    operation.Description = "Returns a single task by ID, or 404 if it does not exist.";
+    return operation;
 });
 
 app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
@@ -159,6 +203,14 @@ app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
     var task = ReadTask(reader);
 
     return Results.Created($"/api/tasks/{task.Id}", task);
+})
+.WithName("CreateTask")
+.WithTags("Tasks")
+.WithOpenApi(operation =>
+{
+    operation.Summary = "Create task";
+    operation.Description = "Creates a task with title, optional description, status, and priority.";
+    return operation;
 });
 
 app.MapPut("/api/tasks/{id:int}", async (int id, UpdateTaskRequest request) =>
@@ -195,6 +247,14 @@ app.MapPut("/api/tasks/{id:int}", async (int id, UpdateTaskRequest request) =>
     }
 
     return Results.Ok(ReadTask(reader));
+})
+.WithName("UpdateTask")
+.WithTags("Tasks")
+.WithOpenApi(operation =>
+{
+    operation.Summary = "Update task";
+    operation.Description = "Updates task fields by ID, or returns 404 if the task does not exist.";
+    return operation;
 });
 
 app.MapDelete("/api/tasks/{id:int}", async (int id) =>
@@ -217,6 +277,14 @@ app.MapDelete("/api/tasks/{id:int}", async (int id) =>
     return deletedRows == 0
         ? Results.NotFound()
         : Results.NoContent();
+})
+.WithName("DeleteTask")
+.WithTags("Tasks")
+.WithOpenApi(operation =>
+{
+    operation.Summary = "Delete task";
+    operation.Description = "Deletes a task by ID, or returns 404 if the task does not exist.";
+    return operation;
 });
 
 app.Run();

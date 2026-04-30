@@ -115,6 +115,7 @@ cp .env.example .env
 | `http://localhost` | React dashboard through Nginx |
 | `http://localhost/health` | Backend health check through Nginx |
 | `http://localhost/api/tasks` | Task API through Nginx |
+| `http://localhost/swagger` | Swagger/OpenAPI documentation |
 
 The backend container listens on port `8080` internally, but it is not exposed directly to the host. Nginx is the public entry point.
 
@@ -169,6 +170,7 @@ Add portfolio screenshots to `docs/screenshots/`:
 | App dashboard | `docs/screenshots/app-dashboard.png` |
 | Docker containers | `docs/screenshots/docker-containers.png` |
 | Health endpoint | `docs/screenshots/health-endpoint.png` |
+| Swagger API docs | `docs/screenshots/swagger-api.png` |
 | GitHub Actions passing | `docs/screenshots/github-actions.png` |
 
 ## CI
