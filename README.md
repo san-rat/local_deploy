@@ -1,8 +1,8 @@
 # LocalDeploy Lab
 
-A lightweight DevOps home lab that runs a React frontend, ASP.NET Core API, PostgreSQL database, Redis cache, and Nginx reverse proxy with Docker Compose on Ubuntu Linux.
+A lightweight DevOps home lab that runs a React frontend, ASP.NET Core task API, activity service, PostgreSQL database, Redis cache, and Nginx reverse proxy with Docker Compose on Ubuntu Linux.
 
-The goal is to show a small production-style full-stack system, not only an application. The browser uses one entry point, Nginx routes API traffic internally, Redis caches dashboard summary data, and PostgreSQL data persists through a Docker volume.
+The goal is to show a small production-style full-stack system, not only an application. The browser uses one entry point, Nginx routes API traffic internally, Redis caches dashboard summary data, the activity service records task events, and PostgreSQL data persists through a Docker volume.
 
 ## Architecture
 
@@ -11,12 +11,14 @@ Browser
   |
   v
 Nginx reverse proxy :80
-  |-- /          -> React static frontend
-  |-- /health    -> ASP.NET Core backend
-  `-- /api/tasks -> ASP.NET Core backend
-                       |-- PostgreSQL database
-                       |   postgres_data volume
-                       `-- Redis cache
+  |-- /             -> React static frontend
+  |-- /health       -> ASP.NET Core backend
+  |-- /api/tasks    -> ASP.NET Core backend
+  `-- /api/activity -> Activity service
+                         |
+                         v
+                    PostgreSQL database
+                    Redis cache
 ```
 
 ## Tech Stack
@@ -24,7 +26,8 @@ Nginx reverse proxy :80
 | Layer | Technology |
 | --- | --- |
 | Frontend | React + Vite |
-| Backend | ASP.NET Core Web API |
+| Backend | ASP.NET Core task API |
+| Activity | ASP.NET Core activity service |
 | Database | PostgreSQL |
 | Cache | Redis |
 | Reverse proxy | Nginx |
@@ -34,8 +37,10 @@ Nginx reverse proxy :80
 ## Features
 
 - Task dashboard with create, read, update status, and delete actions
+- Recent activity feed for task-created, task-updated, and task-deleted events
 - Backend health endpoint with database and Redis connectivity status
 - Redis-backed task summary cache with PostgreSQL fallback
+- Separate activity service with best-effort event delivery
 - PostgreSQL schema initialization script
 - Persistent database volume
 - Nginx single entry point at `http://localhost`
@@ -50,6 +55,7 @@ Nginx reverse proxy :80
 ├── backend/                 # ASP.NET Core API
 ├── database/init.sql         # PostgreSQL schema and seed data
 ├── frontend/                 # React + Vite dashboard
+├── services/activity-service/ # ASP.NET Core activity API
 ├── scripts/                  # Backup and restore scripts
 ├── nginx/nginx.conf          # Reverse proxy configuration
 ├── nginx/nginx.prod.conf     # Production-style reverse proxy configuration
@@ -149,6 +155,7 @@ cp .env.example .env
 | `REDIS_HOST` | `redis` | Backend Redis host inside Docker network |
 | `REDIS_PORT` | `6379` | Backend Redis port |
 | `REDIS_CACHE_SECONDS` | `60` | Task summary cache TTL |
+| `ACTIVITY_SERVICE_URL` | `http://activity-service:8081` | Internal URL used by the task API to record activity |
 | `ASPNETCORE_ENVIRONMENT` | `Development` | Backend runtime environment |
 | `ENABLE_SWAGGER` | `true` in dev, `false` in production-style mode | Enables Swagger when explicitly set |
 | `NGINX_HTTP_PORT` | `80` | Host port used by the production Compose override |
@@ -161,6 +168,7 @@ cp .env.example .env
 | `http://localhost/health` | Backend health check through Nginx |
 | `http://localhost/api/tasks` | Task API through Nginx |
 | `http://localhost/api/tasks/summary` | Redis-cached task summary counts |
+| `http://localhost/api/activity` | Recent activity events through Nginx |
 | `http://localhost/swagger` | Swagger/OpenAPI documentation |
 
 The backend container listens on port `8080` internally, but it is not exposed directly to the host. Nginx is the public entry point.
@@ -172,6 +180,7 @@ The backend container listens on port `8080` internally, but it is not exposed d
 | `GET` | `/health` | API and database health |
 | `GET` | `/api/tasks` | List tasks |
 | `GET` | `/api/tasks/summary` | Task summary counts cached in Redis |
+| `GET` | `/api/activity` | Latest task activity events |
 | `GET` | `/api/tasks/{id}` | Get one task |
 | `POST` | `/api/tasks` | Create task |
 | `PUT` | `/api/tasks/{id}` | Update task fields |
@@ -219,10 +228,11 @@ Example validation response:
 | --- | --- | --- |
 | `nginx` | Serves frontend and proxies API requests | `80` |
 | `backend` | ASP.NET Core API | Internal only |
+| `activity-service` | Records and lists task activity events | Internal only |
 | `redis` | Cache for task summary counts | Internal only |
 | `database` | PostgreSQL database | Internal only |
 
-The production Compose override adds `restart: unless-stopped` to all services and keeps backend, Redis, and database internal. See [Security Notes](docs/security-notes.md) for details.
+The production Compose override adds `restart: unless-stopped` to all services and keeps backend, activity-service, Redis, and database internal. See [Security Notes](docs/security-notes.md) for details.
 
 Check service status:
 
@@ -235,6 +245,7 @@ View logs:
 ```bash
 docker compose logs
 docker compose logs backend
+docker compose logs activity-service
 docker compose logs redis
 docker compose logs database
 docker compose logs nginx
@@ -246,7 +257,7 @@ Follow backend logs while testing API requests:
 docker compose logs -f backend
 ```
 
-The backend writes readable application logs for health checks, task list/detail requests, task summary cache hits/misses, create/update/delete actions, validation failures, missing task IDs, and database or Redis health failures.
+The backend writes readable application logs for health checks, task list/detail requests, task summary cache hits/misses, create/update/delete actions, validation failures, missing task IDs, activity delivery, and database or Redis health failures.
 
 ## Database Backup And Restore
 
@@ -285,8 +296,9 @@ GitHub Actions validates the Docker setup on push and pull request:
 - backend validation tests with `dotnet test`
 - `docker compose config`
 - production Compose validation with `docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.prod.yml config`
-- Docker Compose service validation includes Redis
+- Docker Compose service validation includes Redis and activity-service
 - backend Docker image build
+- activity-service Docker image build
 - frontend/Nginx Docker image build
 
 Workflow file:
@@ -345,6 +357,7 @@ Frontend cannot call API:
 - Docker Compose networking
 - Persistent PostgreSQL storage
 - Redis caching with graceful fallback
+- Best-effort activity event recording with a separate service
 - Reverse proxy routing with Nginx
 - Production-style Compose hardening
 - Nginx security headers and API rate limiting

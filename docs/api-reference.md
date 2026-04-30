@@ -13,6 +13,7 @@ http://localhost/swagger
 | `GET` | `/health` | API and database health |
 | `GET` | `/api/tasks` | List all tasks |
 | `GET` | `/api/tasks/summary` | Task summary counts cached in Redis |
+| `GET` | `/api/activity` | Latest task activity events |
 | `GET` | `/api/tasks/{id}` | Get one task by ID |
 | `POST` | `/api/tasks` | Create a task |
 | `PUT` | `/api/tasks/{id}` | Update task fields |
@@ -60,6 +61,29 @@ Example response:
 ```
 
 The backend caches this response in Redis for `60` seconds by default. Successful task create, update, and delete operations clear the cache so the next summary request refreshes from PostgreSQL. If Redis is unavailable, the endpoint still returns counts from PostgreSQL.
+
+## Activity
+
+```bash
+curl http://localhost/api/activity
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": 1,
+    "eventType": "task-created",
+    "taskId": 12,
+    "taskTitle": "Write docs",
+    "message": "Task created: Write docs",
+    "createdAt": "2026-04-30T16:30:00"
+  }
+]
+```
+
+The activity service stores task-created, task-updated, and task-deleted events in PostgreSQL. Task mutations use best-effort delivery, so task operations still succeed if the activity service is temporarily unavailable.
 
 ## Create Task
 

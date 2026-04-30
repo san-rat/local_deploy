@@ -43,6 +43,7 @@ function App() {
   const [health, setHealth] = useState(null)
   const [tasks, setTasks] = useState([])
   const [taskSummary, setTaskSummary] = useState(EMPTY_TASK_SUMMARY)
+  const [activityEvents, setActivityEvents] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
@@ -59,10 +60,22 @@ function App() {
       apiRequest('/api/tasks/summary'),
     ])
 
+    let activityResult = []
+    let activityError = false
+
+    try {
+      activityResult = await apiRequest('/api/activity')
+    } catch (requestError) {
+      activityError = true
+      console.error(requestError)
+    }
+
     return {
       health: healthResult,
       tasks: taskResult,
       summary: summaryResult,
+      activity: activityResult,
+      activityError,
     }
   }
 
@@ -70,6 +83,11 @@ function App() {
     setHealth(dashboard.health)
     setTasks(dashboard.tasks)
     setTaskSummary(dashboard.summary)
+    setActivityEvents(dashboard.activity)
+
+    if (dashboard.activityError) {
+      setError('Could not load recent activity. Task data is still available.')
+    }
   }
 
   async function loadDashboard() {
@@ -344,6 +362,39 @@ function App() {
             ))}
           </div>
         </section>
+      </section>
+
+      <section className="activity-feed" aria-label="Recent activity">
+        <div className="list-header">
+          <div>
+            <h2>Recent Activity</h2>
+            <p>
+              {isLoading
+                ? 'Loading activity...'
+                : `${activityEvents.length} recent events`}
+            </p>
+          </div>
+        </div>
+
+        {!isLoading && activityEvents.length === 0 && (
+          <div className="empty-state">No activity recorded yet.</div>
+        )}
+
+        {activityEvents.length > 0 && (
+          <div className="activity-list">
+            {activityEvents.map((activity) => (
+              <article className="activity-item" key={activity.id}>
+                <div>
+                  <strong>{activity.message}</strong>
+                  <span>{activity.eventType}</span>
+                </div>
+                <time dateTime={activity.createdAt}>
+                  {formatDate(activity.createdAt)}
+                </time>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   )

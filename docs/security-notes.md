@@ -13,8 +13,8 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml 
 The production override:
 
 - Adds `restart: unless-stopped` for all services.
-- Requires database and Redis environment variables instead of relying on implicit defaults.
-- Keeps backend, Redis, and database internal to the Compose network.
+- Requires database, Redis, and activity-service environment variables instead of relying on implicit defaults.
+- Keeps backend, activity-service, Redis, and database internal to the Compose network.
 - Uses a separate `postgres_prod_data` volume from the development `postgres_data` volume.
 - Sets the backend environment to `Production`.
 - Disables Swagger by default with `ENABLE_SWAGGER=false`.
@@ -23,7 +23,7 @@ Do not commit `.env`. Copy `.env.example` to `.env`, then change the password va
 
 ## Public Entry Point
 
-Nginx is the only public service. The backend listens on port `8080` inside Docker only. Redis and PostgreSQL are only reachable through the Compose network.
+Nginx is the only public service. The backend listens on port `8080` inside Docker only. The activity service listens on port `8081` inside Docker only. Redis and PostgreSQL are only reachable through the Compose network.
 
 Public routes are:
 
@@ -31,14 +31,23 @@ Public routes are:
 /              React frontend
 /health        Backend health through Nginx
 /api/tasks     Task API through Nginx
+/api/activity  Activity feed through Nginx
 /swagger       Swagger only when explicitly enabled
 ```
+
+The internal activity write endpoint, `POST /internal/activity`, is not routed through Nginx.
 
 ## Redis Cache
 
 Redis caches task summary counts for the dashboard. It is an internal cache-only service with no public port and no persistent volume.
 
 The backend deletes the `tasks:summary` cache key after successful task create, update, and delete operations. If Redis is unavailable, the backend logs a warning and reads summary counts from PostgreSQL so the app remains usable.
+
+## Activity Events
+
+The task API sends activity events to the activity service with best-effort internal HTTP calls. This avoids making task mutations depend on activity logging availability.
+
+Activity events are operational history, not a strict compliance audit log. A later stage could add a message queue or retry mechanism if stronger delivery guarantees are needed.
 
 ## Security Headers
 

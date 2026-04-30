@@ -33,6 +33,7 @@ Important defaults:
 | `REDIS_HOST` | `redis` |
 | `REDIS_PORT` | `6379` |
 | `REDIS_CACHE_SECONDS` | `60` |
+| `ACTIVITY_SERVICE_URL` | `http://activity-service:8081` |
 | `ENABLE_SWAGGER` | `true` in dev, `false` in production-style mode |
 | `NGINX_HTTP_PORT` | `80` |
 
@@ -58,6 +59,7 @@ Useful verification commands:
 curl http://localhost/health
 curl http://localhost/api/tasks
 curl http://localhost/api/tasks/summary
+curl http://localhost/api/activity
 curl http://localhost/swagger/v1/swagger.json
 ```
 
@@ -82,6 +84,7 @@ Useful verification commands:
 ```bash
 curl http://localhost/health
 curl http://localhost/api/tasks/summary
+curl http://localhost/api/activity
 curl -I http://localhost
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml ps
 ```
@@ -148,4 +151,24 @@ docker compose stop redis
 curl http://localhost/health
 curl http://localhost/api/tasks/summary
 docker compose start redis
+```
+
+## Activity Service
+
+The activity service records task-created, task-updated, and task-deleted events in PostgreSQL. The task API sends events with best-effort internal HTTP calls, so task operations keep working if the activity service is temporarily unavailable.
+
+Check recent events:
+
+```bash
+curl http://localhost/api/activity
+```
+
+Check resilience:
+
+```bash
+docker compose stop activity-service
+curl -X POST http://localhost/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Activity fallback test","priority":"Low"}'
+docker compose start activity-service
 ```

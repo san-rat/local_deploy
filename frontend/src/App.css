@@ -37,7 +37,9 @@
 .summary-grid div,
 .task-form,
 .task-list,
+.activity-feed,
 .task-card,
+.activity-item,
 .notice,
 .empty-state {
   border: 1px solid var(--border);
@@ -99,7 +101,8 @@
 }
 
 .task-form,
-.task-list {
+.task-list,
+.activity-feed {
   padding: 20px;
 }
 
@@ -193,6 +196,34 @@ button:disabled {
   display: grid;
   gap: 14px;
   margin-top: 16px;
+}
+
+.activity-feed {
+  margin-top: 18px;
+}
+
+.activity-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.activity-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+}
+
+.activity-item div {
+  display: grid;
+  gap: 4px;
+}
+
+.activity-item span,
+.activity-item time {
+  color: var(--muted);
+  font-size: 0.82rem;
 }
 
 .task-card {
@@ -299,7 +330,8 @@ button:disabled {
 
   .hero-section,
   .task-form,
-  .task-list {
+  .task-list,
+  .activity-feed {
     padding: 16px;
   }
 
@@ -308,7 +340,8 @@ button:disabled {
   }
 
   .list-header,
-  .task-main {
+  .task-main,
+  .activity-item {
     display: grid;
   }
 }

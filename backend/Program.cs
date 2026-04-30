@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Net.Http.Json;
 using Microsoft.OpenApi.Models;
 using Npgsql;
 using StackExchange.Redis;
@@ -49,6 +50,11 @@ app.UseCors("LocalFrontend");
 
 var logger = app.Logger;
 var redisCache = new RedisCacheConnection(GetRedisConfiguration());
+var activityClient = new HttpClient
+{
+    Timeout = TimeSpan.FromSeconds(2)
+};
+var activityServiceUrl = GetActivityServiceUrl();
 const string TaskSummaryCacheKey = "tasks:summary";
 
 string GetConnectionString()
@@ -60,6 +66,12 @@ string GetConnectionString()
     var password = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "localdeploy_password";
 
     return $"Host={host};Port={port};Database={database};Username={username};Password={password};GSS Encryption Mode=Disable";
+}
+
+string GetActivityServiceUrl()
+{
+    var url = Environment.GetEnvironmentVariable("ACTIVITY_SERVICE_URL") ?? "http://activity-service:8081";
+    return url.TrimEnd('/');
 }
 
 ConfigurationOptions GetRedisConfiguration()
@@ -111,6 +123,43 @@ IResult ValidationError(string endpointName, IReadOnlyList<string> details)
     );
 
     return Results.BadRequest(new ValidationErrorResponse("Validation failed", details));
+}
+
+async Task SendActivityEventAsync(string eventType, int taskId, string taskTitle, string message)
+{
+    try
+    {
+        var response = await activityClient.PostAsJsonAsync(
+            $"{activityServiceUrl}/internal/activity",
+            new ActivityEventRequest(eventType, taskId, taskTitle, message)
+        );
+
+        if (response.IsSuccessStatusCode)
+        {
+            logger.LogInformation(
+                "Activity event delivered. Event type {ActivityEventType}, Task ID {TaskId}",
+                eventType,
+                taskId
+            );
+            return;
+        }
+
+        logger.LogWarning(
+            "Activity event delivery failed. Event type {ActivityEventType}, Task ID {TaskId}, Status code {StatusCode}",
+            eventType,
+            taskId,
+            (int)response.StatusCode
+        );
+    }
+    catch (Exception exception)
+    {
+        logger.LogWarning(
+            "Activity event delivery failed. Event type {ActivityEventType}, Task ID {TaskId}: {ActivityError}",
+            eventType,
+            taskId,
+            exception.Message
+        );
+    }
 }
 
 async Task<TaskSummaryResponse> ReadTaskSummaryFromDatabaseAsync()
@@ -403,6 +452,12 @@ app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
     );
 
     await InvalidateTaskSummaryCacheAsync();
+    await SendActivityEventAsync(
+        "task-created",
+        task.Id,
+        task.Title,
+        $"Task created: {task.Title}"
+    );
 
     return Results.Created($"/api/tasks/{task.Id}", task);
 })
@@ -467,6 +522,12 @@ app.MapPut("/api/tasks/{id:int}", async (int id, UpdateTaskRequest request) =>
     );
 
     await InvalidateTaskSummaryCacheAsync();
+    await SendActivityEventAsync(
+        "task-updated",
+        task.Id,
+        task.Title,
+        $"Task updated: {task.Title}"
+    );
 
     return Results.Ok(task);
 })
@@ -487,25 +548,35 @@ app.MapDelete("/api/tasks/{id:int}", async (int id) =>
     await using var command = new NpgsqlCommand(
         """
         DELETE FROM tasks
-        WHERE id = @id;
+        WHERE id = @id
+        RETURNING id, title;
         """,
         connection
     );
 
     command.Parameters.AddWithValue("id", id);
 
-    var deletedRows = await command.ExecuteNonQueryAsync();
+    await using var reader = await command.ExecuteReaderAsync();
 
-    if (deletedRows == 0)
+    if (!await reader.ReadAsync())
     {
         logger.LogWarning("Task delete requested. Task ID {TaskId} was not found", id);
 
         return Results.NotFound();
     }
 
-    logger.LogInformation("Task deleted. Task ID {TaskId}", id);
+    var deletedTaskId = reader.GetInt32(reader.GetOrdinal("id"));
+    var deletedTaskTitle = reader.GetString(reader.GetOrdinal("title"));
+
+    logger.LogInformation("Task deleted. Task ID {TaskId}", deletedTaskId);
 
     await InvalidateTaskSummaryCacheAsync();
+    await SendActivityEventAsync(
+        "task-deleted",
+        deletedTaskId,
+        deletedTaskTitle,
+        $"Task deleted: {deletedTaskTitle}"
+    );
 
     return Results.NoContent();
 })
@@ -536,6 +607,13 @@ record TaskSummaryResponse(
     int InProgress,
     int Completed,
     int Blocked
+);
+
+record ActivityEventRequest(
+    string EventType,
+    int? TaskId,
+    string TaskTitle,
+    string Message
 );
 
 record CreateTaskRequest(

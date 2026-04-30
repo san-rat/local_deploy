@@ -18,8 +18,19 @@ services:
       REDIS_HOST: ${REDIS_HOST:?REDIS_HOST is required for production Compose}
       REDIS_PORT: ${REDIS_PORT:?REDIS_PORT is required for production Compose}
       REDIS_CACHE_SECONDS: ${REDIS_CACHE_SECONDS:-60}
+      ACTIVITY_SERVICE_URL: ${ACTIVITY_SERVICE_URL:?ACTIVITY_SERVICE_URL is required for production Compose}
       ASPNETCORE_ENVIRONMENT: Production
       ENABLE_SWAGGER: ${ENABLE_SWAGGER:-false}
+
+  activity-service:
+    restart: unless-stopped
+    environment:
+      DB_HOST: ${DB_HOST:?DB_HOST is required for production Compose}
+      DB_PORT: ${DB_PORT:?DB_PORT is required for production Compose}
+      DB_NAME: ${DB_NAME:?DB_NAME is required for production Compose}
+      DB_USER: ${DB_USER:?DB_USER is required for production Compose}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required for production Compose}
+      ASPNETCORE_ENVIRONMENT: Production
 
   redis:
     restart: unless-stopped

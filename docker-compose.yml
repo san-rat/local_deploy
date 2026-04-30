@@ -10,6 +10,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+      activity-service:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health || exit 1"]
       interval: 10s
@@ -32,6 +34,7 @@ services:
       REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_CACHE_SECONDS: ${REDIS_CACHE_SECONDS:-60}
+      ACTIVITY_SERVICE_URL: ${ACTIVITY_SERVICE_URL:-http://activity-service:8081}
       ASPNETCORE_URLS: http://+:8080
       ENABLE_SWAGGER: "true"
     depends_on:
@@ -39,6 +42,29 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - localdeploy_network
+
+  activity-service:
+    build:
+      context: ./services/activity-service
+    container_name: localdeploy-activity-service
+    environment:
+      DB_HOST: ${DB_HOST:-database}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-localdeploydb}
+      DB_USER: ${DB_USER:-localdeploy_user}
+      DB_PASSWORD: ${DB_PASSWORD:-localdeploy_password}
+      ASPNETCORE_URLS: http://+:8081
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/health > /dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
