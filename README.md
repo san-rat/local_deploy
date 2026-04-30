@@ -39,6 +39,7 @@ Nginx reverse proxy :80
 - Persistent database volume
 - Nginx single entry point at `http://localhost`
 - Docker health checks for database, backend, and Nginx
+- Production-style Compose override with security headers and API rate limiting
 - GitHub Actions Docker build validation
 
 ## Project Structure
@@ -50,9 +51,11 @@ Nginx reverse proxy :80
 ├── frontend/                 # React + Vite dashboard
 ├── scripts/                  # Backup and restore scripts
 ├── nginx/nginx.conf          # Reverse proxy configuration
+├── nginx/nginx.prod.conf     # Production-style reverse proxy configuration
 ├── docs/screenshots/         # Portfolio screenshots
 ├── .github/workflows/        # CI workflow
 ├── docker-compose.yml
+├── docker-compose.prod.yml
 ├── .env.example
 └── README.md
 ```
@@ -64,6 +67,7 @@ Nginx reverse proxy :80
 | [Architecture](docs/architecture.md) | Service layout, request flow, networking, and persistence |
 | [Setup Guide](docs/setup-guide.md) | Prerequisites, environment setup, run/reset commands, and backups |
 | [API Reference](docs/api-reference.md) | Endpoint table, curl examples, validation rules, and Swagger |
+| [Security Notes](docs/security-notes.md) | Production-style Compose, headers, rate limiting, and secret handling |
 | [Troubleshooting](docs/troubleshooting.md) | Common Docker, database, backup, frontend, and CI issues |
 
 ## Run Locally
@@ -99,6 +103,30 @@ docker compose down -v
 
 Use `down -v` carefully because it removes the PostgreSQL volume.
 
+## Production-Style Run
+
+Stage V1 adds a stricter local runtime with `docker-compose.prod.yml`. It keeps only Nginx public, requires environment values, uses restart policies, mounts a production Nginx config, disables Swagger by default, and stores data in a separate `postgres_prod_data` volume.
+
+Create a `.env` file first:
+
+```bash
+cp .env.example .env
+```
+
+Change the password values in `.env`, then start the production-style stack:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Stop it with the same Compose files:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml down
+```
+
+Swagger is available in the development stack. It is disabled by default with the production override unless `ENABLE_SWAGGER=true` is set.
+
 ## Environment Variables
 
 Copy `.env.example` to `.env` if you want to customize local values:
@@ -117,6 +145,9 @@ cp .env.example .env
 | `DB_NAME` | `localdeploydb` | Backend database name |
 | `DB_USER` | `localdeploy_user` | Backend database user |
 | `DB_PASSWORD` | `localdeploy_password` | Backend database password |
+| `ASPNETCORE_ENVIRONMENT` | `Development` | Backend runtime environment |
+| `ENABLE_SWAGGER` | `true` in dev, `false` in production-style mode | Enables Swagger when explicitly set |
+| `NGINX_HTTP_PORT` | `80` | Host port used by the production Compose override |
 
 ## URLs
 
@@ -184,6 +215,8 @@ Example validation response:
 | `backend` | ASP.NET Core API | Internal only |
 | `database` | PostgreSQL database | Internal only |
 
+The production Compose override adds `restart: unless-stopped` to all services and keeps backend and database internal. See [Security Notes](docs/security-notes.md) for details.
+
 Check service status:
 
 ```bash
@@ -243,6 +276,7 @@ GitHub Actions validates the Docker setup on push and pull request:
 
 - backend validation tests with `dotnet test`
 - `docker compose config`
+- production Compose validation with `docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.prod.yml config`
 - backend Docker image build
 - frontend/Nginx Docker image build
 
@@ -302,6 +336,8 @@ Frontend cannot call API:
 - Docker Compose networking
 - Persistent PostgreSQL storage
 - Reverse proxy routing with Nginx
+- Production-style Compose hardening
+- Nginx security headers and API rate limiting
 - Environment-based configuration
 - Basic CI validation with GitHub Actions
 - Full-stack deployment thinking on a local Linux machine

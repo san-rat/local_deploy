@@ -28,6 +28,9 @@ jobs:
       - name: Validate Docker Compose file
         run: docker compose config
 
+      - name: Validate production Docker Compose file
+        run: docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.prod.yml config
+
       - name: Build backend image
         run: docker build -t localdeploy-backend ./backend
 

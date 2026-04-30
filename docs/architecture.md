@@ -31,11 +31,23 @@ Frontend page loads from `http://localhost`. API calls use relative paths such a
 
 Nginx proxies `/api/`, `/health`, and `/swagger/` requests to the backend service over the Compose network. The backend connects to PostgreSQL through the Compose service name `database`.
 
+## Production-Style Runtime
+
+The default `docker-compose.yml` remains optimized for local development and portfolio demos. Stage V1 adds `docker-compose.prod.yml` as a production-style override:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+The production override keeps only Nginx public, adds restart policies, requires database environment variables, sets the backend to `Production`, disables Swagger by default, and mounts a hardened Nginx config with security headers and API rate limiting.
+
 ## Persistence
 
 PostgreSQL data is stored in the named Docker volume `postgres_data`. Running `docker compose down` keeps the data. Running `docker compose down -v` removes it.
 
 The database schema and seed task are created from `database/init.sql` only when PostgreSQL initializes a fresh volume.
+
+The production-style stack uses a separate `postgres_prod_data` volume so production-style testing does not accidentally reuse the development database volume.
 
 ## Health Checks
 
