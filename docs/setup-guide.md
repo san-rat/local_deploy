@@ -30,6 +30,9 @@ Important defaults:
 | `POSTGRES_PASSWORD` | `localdeploy_password` |
 | `DB_HOST` | `database` |
 | `DB_PORT` | `5432` |
+| `REDIS_HOST` | `redis` |
+| `REDIS_PORT` | `6379` |
+| `REDIS_CACHE_SECONDS` | `60` |
 | `ENABLE_SWAGGER` | `true` in dev, `false` in production-style mode |
 | `NGINX_HTTP_PORT` | `80` |
 
@@ -54,12 +57,13 @@ Useful verification commands:
 ```bash
 curl http://localhost/health
 curl http://localhost/api/tasks
+curl http://localhost/api/tasks/summary
 curl http://localhost/swagger/v1/swagger.json
 ```
 
 ## Run The Production-Style Stack
 
-Stage V1 includes a production-style Compose override. It requires env values, adds restart policies, keeps only Nginx public, disables Swagger by default, uses production Nginx security headers, and stores data in a separate `postgres_prod_data` volume.
+Stage V1 includes a production-style Compose override. It requires env values, adds restart policies, keeps only Nginx public, disables Swagger by default, uses production Nginx security headers, and stores data in a separate `postgres_prod_data` volume. Redis remains internal and cache-only in both development and production-style runs.
 
 Prepare the env file:
 
@@ -77,6 +81,7 @@ Useful verification commands:
 
 ```bash
 curl http://localhost/health
+curl http://localhost/api/tasks/summary
 curl -I http://localhost
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml ps
 ```
@@ -129,3 +134,18 @@ Restore a backup:
 ```
 
 Restore resets the current `public` schema before loading the selected backup.
+
+## Redis Cache
+
+Redis caches dashboard summary counts for `60` seconds by default. The backend deletes the summary cache after successful task create, update, or delete operations.
+
+Redis is cache-only. Stopping or recreating the Redis container does not delete source task data because PostgreSQL remains the system of record.
+
+Check Redis fallback behavior:
+
+```bash
+docker compose stop redis
+curl http://localhost/health
+curl http://localhost/api/tasks/summary
+docker compose start redis
+```

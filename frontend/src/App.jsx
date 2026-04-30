@@ -1,9 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 
 const API_BASE_URL = ''
 const STATUS_FLOW = ['Pending', 'In Progress', 'Completed', 'Blocked']
 const PRIORITIES = ['Low', 'Medium', 'High', 'Critical']
+const EMPTY_TASK_SUMMARY = {
+  total: 0,
+  pending: 0,
+  inProgress: 0,
+  completed: 0,
+  blocked: 0,
+}
 
 async function apiRequest(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -35,6 +42,7 @@ function formatDate(value) {
 function App() {
   const [health, setHealth] = useState(null)
   const [tasks, setTasks] = useState([])
+  const [taskSummary, setTaskSummary] = useState(EMPTY_TASK_SUMMARY)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
@@ -44,27 +52,30 @@ function App() {
     priority: 'Medium',
   })
 
-  const taskCounts = useMemo(() => {
-    return tasks.reduce(
-      (counts, task) => {
-        counts.total += 1
-        counts[task.status] = (counts[task.status] ?? 0) + 1
-        return counts
-      },
-      { total: 0 },
-    )
-  }, [tasks])
+  async function fetchDashboard() {
+    const [healthResult, taskResult, summaryResult] = await Promise.all([
+      apiRequest('/health'),
+      apiRequest('/api/tasks'),
+      apiRequest('/api/tasks/summary'),
+    ])
+
+    return {
+      health: healthResult,
+      tasks: taskResult,
+      summary: summaryResult,
+    }
+  }
+
+  function applyDashboard(dashboard) {
+    setHealth(dashboard.health)
+    setTasks(dashboard.tasks)
+    setTaskSummary(dashboard.summary)
+  }
 
   async function loadDashboard() {
     try {
       setError('')
-      const [healthResult, taskResult] = await Promise.all([
-        apiRequest('/health'),
-        apiRequest('/api/tasks'),
-      ])
-
-      setHealth(healthResult)
-      setTasks(taskResult)
+      applyDashboard(await fetchDashboard())
     } catch (requestError) {
       setError(
         'Could not reach the backend API. Start Docker Compose and try again.',
@@ -80,17 +91,13 @@ function App() {
 
     async function loadInitialDashboard() {
       try {
-        const [healthResult, taskResult] = await Promise.all([
-          apiRequest('/health'),
-          apiRequest('/api/tasks'),
-        ])
+        const dashboard = await fetchDashboard()
 
         if (!isActive) {
           return
         }
 
-        setHealth(healthResult)
-        setTasks(taskResult)
+        applyDashboard(dashboard)
       } catch (requestError) {
         if (!isActive) {
           return
@@ -134,7 +141,7 @@ function App() {
       setIsSaving(true)
       setError('')
 
-      const task = await apiRequest('/api/tasks', {
+      await apiRequest('/api/tasks', {
         method: 'POST',
         body: JSON.stringify({
           title: form.title.trim(),
@@ -143,12 +150,12 @@ function App() {
         }),
       })
 
-      setTasks((currentTasks) => [...currentTasks, task])
       setForm({
         title: '',
         description: '',
         priority: 'Medium',
       })
+      await loadDashboard()
     } catch (requestError) {
       setError('Could not create the task.')
       console.error(requestError)
@@ -163,16 +170,12 @@ function App() {
 
     try {
       setError('')
-      const updatedTask = await apiRequest(`/api/tasks/${task.id}`, {
+      await apiRequest(`/api/tasks/${task.id}`, {
         method: 'PUT',
         body: JSON.stringify({ status: nextStatus }),
       })
 
-      setTasks((currentTasks) =>
-        currentTasks.map((currentTask) =>
-          currentTask.id === updatedTask.id ? updatedTask : currentTask,
-        ),
-      )
+      await loadDashboard()
     } catch (requestError) {
       setError('Could not update task status.')
       console.error(requestError)
@@ -186,9 +189,7 @@ function App() {
         method: 'DELETE',
       })
 
-      setTasks((currentTasks) =>
-        currentTasks.filter((task) => task.id !== taskId),
-      )
+      await loadDashboard()
     } catch (requestError) {
       setError('Could not delete the task.')
       console.error(requestError)
@@ -220,6 +221,12 @@ function App() {
               {health?.database ?? 'checking'}
             </strong>
           </div>
+          <div>
+            <span className="status-label">Redis</span>
+            <strong className={health?.redis === 'connected' ? 'ok' : 'warn'}>
+              {health?.redis ?? 'checking'}
+            </strong>
+          </div>
         </div>
       </section>
 
@@ -228,19 +235,19 @@ function App() {
       <section className="summary-grid" aria-label="Task summary">
         <div>
           <span>Total</span>
-          <strong>{taskCounts.total}</strong>
+          <strong>{taskSummary.total}</strong>
         </div>
         <div>
           <span>Pending</span>
-          <strong>{taskCounts.Pending ?? 0}</strong>
+          <strong>{taskSummary.pending}</strong>
         </div>
         <div>
           <span>In Progress</span>
-          <strong>{taskCounts['In Progress'] ?? 0}</strong>
+          <strong>{taskSummary.inProgress}</strong>
         </div>
         <div>
           <span>Completed</span>
-          <strong>{taskCounts.Completed ?? 0}</strong>
+          <strong>{taskSummary.completed}</strong>
         </div>
       </section>
 

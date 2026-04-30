@@ -29,6 +29,9 @@ services:
       DB_NAME: ${DB_NAME:-localdeploydb}
       DB_USER: ${DB_USER:-localdeploy_user}
       DB_PASSWORD: ${DB_PASSWORD:-localdeploy_password}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_CACHE_SECONDS: ${REDIS_CACHE_SECONDS:-60}
       ASPNETCORE_URLS: http://+:8080
       ENABLE_SWAGGER: "true"
     depends_on:
@@ -40,6 +43,18 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    networks:
+      - localdeploy_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: localdeploy-redis
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
     networks:
       - localdeploy_network
 

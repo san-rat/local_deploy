@@ -12,6 +12,7 @@ http://localhost/swagger
 | --- | --- | --- |
 | `GET` | `/health` | API and database health |
 | `GET` | `/api/tasks` | List all tasks |
+| `GET` | `/api/tasks/summary` | Task summary counts cached in Redis |
 | `GET` | `/api/tasks/{id}` | Get one task by ID |
 | `POST` | `/api/tasks` | Create a task |
 | `PUT` | `/api/tasks/{id}` | Update task fields |
@@ -29,7 +30,8 @@ Example response:
 {
   "status": "running",
   "service": "localdeploy-api",
-  "database": "connected"
+  "database": "connected",
+  "redis": "connected"
 }
 ```
 
@@ -38,6 +40,26 @@ Example response:
 ```bash
 curl http://localhost/api/tasks
 ```
+
+## Task Summary
+
+```bash
+curl http://localhost/api/tasks/summary
+```
+
+Example response:
+
+```json
+{
+  "total": 4,
+  "pending": 1,
+  "inProgress": 1,
+  "completed": 1,
+  "blocked": 1
+}
+```
+
+The backend caches this response in Redis for `60` seconds by default. Successful task create, update, and delete operations clear the cache so the next summary request refreshes from PostgreSQL. If Redis is unavailable, the endpoint still returns counts from PostgreSQL.
 
 ## Create Task
 

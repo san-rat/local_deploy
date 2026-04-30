@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Microsoft.OpenApi.Models;
 using Npgsql;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,6 +48,8 @@ if (swaggerEnabled)
 app.UseCors("LocalFrontend");
 
 var logger = app.Logger;
+var redisCache = new RedisCacheConnection(GetRedisConfiguration());
+const string TaskSummaryCacheKey = "tasks:summary";
 
 string GetConnectionString()
 {
@@ -56,6 +60,33 @@ string GetConnectionString()
     var password = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "localdeploy_password";
 
     return $"Host={host};Port={port};Database={database};Username={username};Password={password};GSS Encryption Mode=Disable";
+}
+
+ConfigurationOptions GetRedisConfiguration()
+{
+    var host = Environment.GetEnvironmentVariable("REDIS_HOST") ?? "localhost";
+    var port = Environment.GetEnvironmentVariable("REDIS_PORT") ?? "6379";
+
+    return new ConfigurationOptions
+    {
+        EndPoints = { $"{host}:{port}" },
+        AbortOnConnectFail = false,
+        ConnectRetry = 3,
+        ConnectTimeout = 1000,
+        SyncTimeout = 1000
+    };
+}
+
+int GetRedisCacheSeconds()
+{
+    var rawValue = Environment.GetEnvironmentVariable("REDIS_CACHE_SECONDS");
+
+    if (int.TryParse(rawValue, out var seconds) && seconds > 0)
+    {
+        return seconds;
+    }
+
+    return 60;
 }
 
 TaskItem ReadTask(NpgsqlDataReader reader)
@@ -82,44 +113,154 @@ IResult ValidationError(string endpointName, IReadOnlyList<string> details)
     return Results.BadRequest(new ValidationErrorResponse("Validation failed", details));
 }
 
+async Task<TaskSummaryResponse> ReadTaskSummaryFromDatabaseAsync()
+{
+    await using var connection = new NpgsqlConnection(GetConnectionString());
+    await connection.OpenAsync();
+
+    await using var command = new NpgsqlCommand(
+        """
+        SELECT
+            COUNT(*)::integer AS total,
+            COUNT(*) FILTER (WHERE status = 'Pending')::integer AS pending,
+            COUNT(*) FILTER (WHERE status = 'In Progress')::integer AS in_progress,
+            COUNT(*) FILTER (WHERE status = 'Completed')::integer AS completed,
+            COUNT(*) FILTER (WHERE status = 'Blocked')::integer AS blocked
+        FROM tasks;
+        """,
+        connection
+    );
+
+    await using var reader = await command.ExecuteReaderAsync();
+    await reader.ReadAsync();
+
+    return new TaskSummaryResponse(
+        reader.GetInt32(reader.GetOrdinal("total")),
+        reader.GetInt32(reader.GetOrdinal("pending")),
+        reader.GetInt32(reader.GetOrdinal("in_progress")),
+        reader.GetInt32(reader.GetOrdinal("completed")),
+        reader.GetInt32(reader.GetOrdinal("blocked"))
+    );
+}
+
+async Task<TaskSummaryResponse> GetTaskSummaryAsync()
+{
+    try
+    {
+        if (!redisCache.IsConnected)
+        {
+            logger.LogWarning("Task summary cache unavailable. Redis is disconnected. Reading summary from PostgreSQL");
+            return await ReadTaskSummaryFromDatabaseAsync();
+        }
+
+        var database = redisCache.GetDatabase();
+        var cachedSummary = await database.StringGetAsync(TaskSummaryCacheKey);
+
+        if (cachedSummary.HasValue)
+        {
+            var summary = JsonSerializer.Deserialize<TaskSummaryResponse>(cachedSummary!);
+
+            if (summary is not null)
+            {
+                logger.LogInformation("Task summary cache hit");
+                return summary;
+            }
+
+            logger.LogWarning("Task summary cache value could not be deserialized");
+        }
+
+        logger.LogInformation("Task summary cache miss");
+
+        var freshSummary = await ReadTaskSummaryFromDatabaseAsync();
+
+        await database.StringSetAsync(
+            TaskSummaryCacheKey,
+            JsonSerializer.Serialize(freshSummary),
+            TimeSpan.FromSeconds(GetRedisCacheSeconds())
+        );
+
+        logger.LogInformation("Task summary cached for {CacheSeconds} seconds", GetRedisCacheSeconds());
+
+        return freshSummary;
+    }
+    catch (Exception exception)
+    {
+        logger.LogWarning(
+            "Task summary cache unavailable. Reading summary from PostgreSQL: {RedisError}",
+            exception.Message
+        );
+        return await ReadTaskSummaryFromDatabaseAsync();
+    }
+}
+
+async Task InvalidateTaskSummaryCacheAsync()
+{
+    try
+    {
+        var database = redisCache.GetDatabase();
+        await database.KeyDeleteAsync(TaskSummaryCacheKey);
+        logger.LogInformation("Task summary cache invalidated");
+    }
+    catch (Exception exception)
+    {
+        logger.LogWarning("Task summary cache invalidation failed: {RedisError}", exception.Message);
+    }
+}
+
+string GetRedisStatus()
+{
+    try
+    {
+        return redisCache.IsConnected ? "connected" : "disconnected";
+    }
+    catch (Exception exception)
+    {
+        logger.LogWarning("Redis health check failed: {RedisError}", exception.Message);
+        return "disconnected";
+    }
+}
+
 app.MapGet("/health", async () =>
 {
+    var databaseStatus = "connected";
+    var redisStatus = GetRedisStatus();
+
     try
     {
         await using var connection = new NpgsqlConnection(GetConnectionString());
         await connection.OpenAsync();
-
-        logger.LogInformation("Health check requested. Database status: {DatabaseStatus}", "connected");
-
-        return Results.Ok(new
-        {
-            status = "running",
-            service = "localdeploy-api",
-            database = "connected"
-        });
     }
     catch (Exception exception)
     {
+        databaseStatus = "disconnected";
+
         logger.LogWarning(
             exception,
             "Health check requested. Database status: {DatabaseStatus}",
             "disconnected"
         );
-
-        return Results.Ok(new
-        {
-            status = "running",
-            service = "localdeploy-api",
-            database = "disconnected"
-        });
     }
+
+    logger.LogInformation(
+        "Health check requested. Database status: {DatabaseStatus}, Redis status: {RedisStatus}",
+        databaseStatus,
+        redisStatus
+    );
+
+    return Results.Ok(new
+    {
+        status = "running",
+        service = "localdeploy-api",
+        database = databaseStatus,
+        redis = redisStatus
+    });
 })
 .WithName("GetHealth")
 .WithTags("Health")
 .WithOpenApi(operation =>
 {
-    operation.Summary = "Check API and database health";
-    operation.Description = "Returns API status and whether the backend can connect to PostgreSQL.";
+    operation.Summary = "Check API, database, and Redis health";
+    operation.Description = "Returns API status and whether the backend can connect to PostgreSQL and Redis.";
     return operation;
 });
 
@@ -156,6 +297,30 @@ app.MapGet("/api/tasks", async () =>
 {
     operation.Summary = "List tasks";
     operation.Description = "Returns all task records ordered by ID.";
+    return operation;
+});
+
+app.MapGet("/api/tasks/summary", async () =>
+{
+    var summary = await GetTaskSummaryAsync();
+
+    logger.LogInformation(
+        "Task summary requested. Total {TotalTasks}, Pending {PendingTasks}, In Progress {InProgressTasks}, Completed {CompletedTasks}, Blocked {BlockedTasks}",
+        summary.Total,
+        summary.Pending,
+        summary.InProgress,
+        summary.Completed,
+        summary.Blocked
+    );
+
+    return Results.Ok(summary);
+})
+.WithName("GetTaskSummary")
+.WithTags("Tasks")
+.WithOpenApi(operation =>
+{
+    operation.Summary = "Get task summary";
+    operation.Description = "Returns cached task status counts. Falls back to PostgreSQL if Redis is unavailable.";
     return operation;
 });
 
@@ -237,6 +402,8 @@ app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
         task.Priority
     );
 
+    await InvalidateTaskSummaryCacheAsync();
+
     return Results.Created($"/api/tasks/{task.Id}", task);
 })
 .WithName("CreateTask")
@@ -299,6 +466,8 @@ app.MapPut("/api/tasks/{id:int}", async (int id, UpdateTaskRequest request) =>
         task.Priority
     );
 
+    await InvalidateTaskSummaryCacheAsync();
+
     return Results.Ok(task);
 })
 .WithName("UpdateTask")
@@ -336,6 +505,8 @@ app.MapDelete("/api/tasks/{id:int}", async (int id) =>
 
     logger.LogInformation("Task deleted. Task ID {TaskId}", id);
 
+    await InvalidateTaskSummaryCacheAsync();
+
     return Results.NoContent();
 })
 .WithName("DeleteTask")
@@ -359,6 +530,14 @@ record TaskItem(
     DateTime UpdatedAt
 );
 
+record TaskSummaryResponse(
+    int Total,
+    int Pending,
+    int InProgress,
+    int Completed,
+    int Blocked
+);
+
 record CreateTaskRequest(
     string Title,
     string? Description,
@@ -377,3 +556,35 @@ record ValidationErrorResponse(
     string Error,
     IReadOnlyList<string> Details
 );
+
+sealed class RedisCacheConnection
+{
+    private readonly ConfigurationOptions configuration;
+    private readonly object syncRoot = new();
+    private IConnectionMultiplexer? connection;
+
+    public RedisCacheConnection(ConfigurationOptions configuration)
+    {
+        this.configuration = configuration;
+    }
+
+    public IDatabase GetDatabase()
+    {
+        return GetConnection().GetDatabase();
+    }
+
+    public bool IsConnected => GetConnection().IsConnected;
+
+    private IConnectionMultiplexer GetConnection()
+    {
+        lock (syncRoot)
+        {
+            if (connection is null)
+            {
+                connection = ConnectionMultiplexer.Connect(configuration);
+            }
+
+            return connection;
+        }
+    }
+}
