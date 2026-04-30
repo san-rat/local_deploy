@@ -213,6 +213,7 @@ Add portfolio screenshots to `docs/screenshots/`:
 
 GitHub Actions validates the Docker setup on push and pull request:
 
+- backend validation tests with `dotnet test`
 - `docker compose config`
 - backend Docker image build
 - frontend/Nginx Docker image build

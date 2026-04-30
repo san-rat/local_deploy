@@ -11,6 +11,8 @@ frontend/dist/
 # .NET
 backend/bin/
 backend/obj/
+backend/LocalDeploy.Api.Tests/bin/
+backend/LocalDeploy.Api.Tests/obj/
 
 # OS files
 .DS_Store

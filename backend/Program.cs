@@ -47,22 +47,6 @@ app.UseCors("LocalFrontend");
 
 var logger = app.Logger;
 
-var allowedStatuses = new HashSet<string>(StringComparer.Ordinal)
-{
-    "Pending",
-    "In Progress",
-    "Completed",
-    "Blocked"
-};
-
-var allowedPriorities = new HashSet<string>(StringComparer.Ordinal)
-{
-    "Low",
-    "Medium",
-    "High",
-    "Critical"
-};
-
 string GetConnectionString()
 {
     var host = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
@@ -96,82 +80,6 @@ IResult ValidationError(string endpointName, IReadOnlyList<string> details)
     );
 
     return Results.BadRequest(new ValidationErrorResponse("Validation failed", details));
-}
-
-List<string> ValidateCreateTask(CreateTaskRequest request)
-{
-    var errors = new List<string>();
-
-    ValidateRequiredTitle(request.Title, errors);
-    ValidateAllowedValue("Status", request.Status, allowedStatuses, errors);
-    ValidateAllowedValue("Priority", request.Priority, allowedPriorities, errors);
-
-    return errors;
-}
-
-List<string> ValidateUpdateTask(UpdateTaskRequest request)
-{
-    var errors = new List<string>();
-
-    if (request.Title is not null)
-    {
-        ValidateOptionalTitle(request.Title, errors);
-    }
-
-    ValidateAllowedValue("Status", request.Status, allowedStatuses, errors);
-    ValidateAllowedValue("Priority", request.Priority, allowedPriorities, errors);
-
-    return errors;
-}
-
-void ValidateRequiredTitle(string? title, List<string> errors)
-{
-    if (string.IsNullOrWhiteSpace(title))
-    {
-        errors.Add("Title is required.");
-        return;
-    }
-
-    ValidateTitleLength(title, errors);
-}
-
-void ValidateOptionalTitle(string title, List<string> errors)
-{
-    if (string.IsNullOrWhiteSpace(title))
-    {
-        errors.Add("Title cannot be empty when provided.");
-        return;
-    }
-
-    ValidateTitleLength(title, errors);
-}
-
-void ValidateTitleLength(string title, List<string> errors)
-{
-    if (title.Trim().Length > 150)
-    {
-        errors.Add("Title must be 150 characters or fewer.");
-    }
-}
-
-void ValidateAllowedValue(
-    string fieldName,
-    string? value,
-    HashSet<string> allowedValues,
-    List<string> errors
-)
-{
-    if (value is null)
-    {
-        return;
-    }
-
-    var trimmedValue = value.Trim();
-
-    if (string.IsNullOrWhiteSpace(trimmedValue) || !allowedValues.Contains(trimmedValue))
-    {
-        errors.Add($"{fieldName} must be one of: {string.Join(", ", allowedValues)}.");
-    }
 }
 
 app.MapGet("/health", async () =>
@@ -293,7 +201,7 @@ app.MapGet("/api/tasks/{id:int}", async (int id) =>
 
 app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
 {
-    var validationErrors = ValidateCreateTask(request);
+    var validationErrors = TaskValidation.ValidateCreate(request.Title, request.Status, request.Priority);
 
     if (validationErrors.Count > 0)
     {
@@ -342,7 +250,7 @@ app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
 
 app.MapPut("/api/tasks/{id:int}", async (int id, UpdateTaskRequest request) =>
 {
-    var validationErrors = ValidateUpdateTask(request);
+    var validationErrors = TaskValidation.ValidateUpdate(request.Title, request.Status, request.Priority);
 
     if (validationErrors.Count > 0)
     {
