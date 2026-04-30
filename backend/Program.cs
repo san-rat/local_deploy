@@ -21,7 +21,7 @@ string GetConnectionString()
     var username = Environment.GetEnvironmentVariable("DB_USER") ?? "localdeploy_user";
     var password = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "localdeploy_password";
 
-    return $"Host={host};Port={port};Database={database};Username={username};Password={password}";
+    return $"Host={host};Port={port};Database={database};Username={username};Password={password};GSS Encryption Mode=Disable";
 }
 
 TaskItem ReadTask(NpgsqlDataReader reader)
@@ -232,4 +232,3 @@ record UpdateTaskRequest(
     string? Status,
     string? Priority
 );
-
