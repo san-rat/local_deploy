@@ -1,5 +1,6 @@
 # Local environment
 .env
+backups/
 
 # Codex/local assistant files
 .codex/

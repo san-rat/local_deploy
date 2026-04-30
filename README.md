@@ -197,6 +197,24 @@ docker compose logs -f backend
 
 The backend writes readable application logs for health checks, task list/detail requests, create/update/delete actions, validation failures, missing task IDs, and database health failures.
 
+## Database Backup And Restore
+
+Create a timestamped PostgreSQL backup from the running database container:
+
+```bash
+./scripts/backup-db.sh
+```
+
+Backups are written to `backups/` and are ignored by Git.
+
+Restore a backup into the running database container:
+
+```bash
+./scripts/restore-db.sh backups/localdeploydb_YYYYMMDD_HHMMSS.sql
+```
+
+Restore resets the current `public` schema before loading the backup. This is destructive for the current local database state, so create a backup first if you need to keep the latest data.
+
 ## Screenshots
 
 Add portfolio screenshots to `docs/screenshots/`:
@@ -254,6 +272,13 @@ Backend cannot connect to database:
 - Confirm `DB_HOST=database`.
 - Check `docker compose logs database`.
 - Check `docker compose ps` and health status.
+
+Backup or restore script cannot reach database:
+
+- Start the stack with `docker compose up -d --build`.
+- Confirm `localdeploy-database` is healthy with `docker compose ps`.
+- Check the backup file path when restore says the file is missing.
+- Check `docker compose logs database` if restore fails while loading SQL.
 
 Frontend cannot call API:
 
