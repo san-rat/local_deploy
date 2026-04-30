@@ -138,6 +138,34 @@ curl -X POST http://localhost/api/tasks \
   -d '{"title":"Write README","description":"Document the local lab","priority":"High"}'
 ```
 
+Validation rules:
+
+- `title` is required when creating a task.
+- `title` must be 150 characters or fewer.
+- `status` must be one of `Pending`, `In Progress`, `Completed`, or `Blocked`.
+- `priority` must be one of `Low`, `Medium`, `High`, or `Critical`.
+- Invalid requests return `400 Bad Request` with an `error` and `details` array.
+
+Example invalid request:
+
+```bash
+curl -i -X POST http://localhost/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"","priority":"Urgent"}'
+```
+
+Example validation response:
+
+```json
+{
+  "error": "Validation failed",
+  "details": [
+    "Title is required.",
+    "Priority must be one of: Low, Medium, High, Critical."
+  ]
+}
+```
+
 ## Docker Services
 
 | Service | Purpose | Public port |

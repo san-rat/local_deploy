@@ -45,6 +45,22 @@ if (swaggerEnabled)
 
 app.UseCors("LocalFrontend");
 
+var allowedStatuses = new HashSet<string>(StringComparer.Ordinal)
+{
+    "Pending",
+    "In Progress",
+    "Completed",
+    "Blocked"
+};
+
+var allowedPriorities = new HashSet<string>(StringComparer.Ordinal)
+{
+    "Low",
+    "Medium",
+    "High",
+    "Critical"
+};
+
 string GetConnectionString()
 {
     var host = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
@@ -67,6 +83,87 @@ TaskItem ReadTask(NpgsqlDataReader reader)
         reader.GetDateTime(reader.GetOrdinal("created_at")),
         reader.GetDateTime(reader.GetOrdinal("updated_at"))
     );
+}
+
+IResult ValidationError(IReadOnlyList<string> details)
+{
+    return Results.BadRequest(new ValidationErrorResponse("Validation failed", details));
+}
+
+List<string> ValidateCreateTask(CreateTaskRequest request)
+{
+    var errors = new List<string>();
+
+    ValidateRequiredTitle(request.Title, errors);
+    ValidateAllowedValue("Status", request.Status, allowedStatuses, errors);
+    ValidateAllowedValue("Priority", request.Priority, allowedPriorities, errors);
+
+    return errors;
+}
+
+List<string> ValidateUpdateTask(UpdateTaskRequest request)
+{
+    var errors = new List<string>();
+
+    if (request.Title is not null)
+    {
+        ValidateOptionalTitle(request.Title, errors);
+    }
+
+    ValidateAllowedValue("Status", request.Status, allowedStatuses, errors);
+    ValidateAllowedValue("Priority", request.Priority, allowedPriorities, errors);
+
+    return errors;
+}
+
+void ValidateRequiredTitle(string? title, List<string> errors)
+{
+    if (string.IsNullOrWhiteSpace(title))
+    {
+        errors.Add("Title is required.");
+        return;
+    }
+
+    ValidateTitleLength(title, errors);
+}
+
+void ValidateOptionalTitle(string title, List<string> errors)
+{
+    if (string.IsNullOrWhiteSpace(title))
+    {
+        errors.Add("Title cannot be empty when provided.");
+        return;
+    }
+
+    ValidateTitleLength(title, errors);
+}
+
+void ValidateTitleLength(string title, List<string> errors)
+{
+    if (title.Trim().Length > 150)
+    {
+        errors.Add("Title must be 150 characters or fewer.");
+    }
+}
+
+void ValidateAllowedValue(
+    string fieldName,
+    string? value,
+    HashSet<string> allowedValues,
+    List<string> errors
+)
+{
+    if (value is null)
+    {
+        return;
+    }
+
+    var trimmedValue = value.Trim();
+
+    if (string.IsNullOrWhiteSpace(trimmedValue) || !allowedValues.Contains(trimmedValue))
+    {
+        errors.Add($"{fieldName} must be one of: {string.Join(", ", allowedValues)}.");
+    }
 }
 
 app.MapGet("/health", async () =>
@@ -172,12 +269,11 @@ app.MapGet("/api/tasks/{id:int}", async (int id) =>
 
 app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
 {
-    if (string.IsNullOrWhiteSpace(request.Title))
+    var validationErrors = ValidateCreateTask(request);
+
+    if (validationErrors.Count > 0)
     {
-        return Results.BadRequest(new
-        {
-            error = "Task title is required."
-        });
+        return ValidationError(validationErrors);
     }
 
     await using var connection = new NpgsqlConnection(GetConnectionString());
@@ -192,10 +288,10 @@ app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
         connection
     );
 
-    command.Parameters.AddWithValue("title", request.Title);
-    command.Parameters.AddWithValue("description", request.Description ?? "");
-    command.Parameters.AddWithValue("status", request.Status ?? "Pending");
-    command.Parameters.AddWithValue("priority", request.Priority ?? "Medium");
+    command.Parameters.AddWithValue("title", request.Title.Trim());
+    command.Parameters.AddWithValue("description", request.Description?.Trim() ?? "");
+    command.Parameters.AddWithValue("status", request.Status?.Trim() ?? "Pending");
+    command.Parameters.AddWithValue("priority", request.Priority?.Trim() ?? "Medium");
 
     await using var reader = await command.ExecuteReaderAsync();
     await reader.ReadAsync();
@@ -209,12 +305,19 @@ app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
 .WithOpenApi(operation =>
 {
     operation.Summary = "Create task";
-    operation.Description = "Creates a task with title, optional description, status, and priority.";
+    operation.Description = "Creates a task with a required title, optional description, and valid status/priority values.";
     return operation;
 });
 
 app.MapPut("/api/tasks/{id:int}", async (int id, UpdateTaskRequest request) =>
 {
+    var validationErrors = ValidateUpdateTask(request);
+
+    if (validationErrors.Count > 0)
+    {
+        return ValidationError(validationErrors);
+    }
+
     await using var connection = new NpgsqlConnection(GetConnectionString());
     await connection.OpenAsync();
 
@@ -234,10 +337,10 @@ app.MapPut("/api/tasks/{id:int}", async (int id, UpdateTaskRequest request) =>
     );
 
     command.Parameters.AddWithValue("id", id);
-    command.Parameters.AddWithValue("title", (object?)request.Title ?? DBNull.Value);
-    command.Parameters.AddWithValue("description", (object?)request.Description ?? DBNull.Value);
-    command.Parameters.AddWithValue("status", (object?)request.Status ?? DBNull.Value);
-    command.Parameters.AddWithValue("priority", (object?)request.Priority ?? DBNull.Value);
+    command.Parameters.AddWithValue("title", request.Title is null ? DBNull.Value : request.Title.Trim());
+    command.Parameters.AddWithValue("description", request.Description is null ? DBNull.Value : request.Description.Trim());
+    command.Parameters.AddWithValue("status", request.Status is null ? DBNull.Value : request.Status.Trim());
+    command.Parameters.AddWithValue("priority", request.Priority is null ? DBNull.Value : request.Priority.Trim());
 
     await using var reader = await command.ExecuteReaderAsync();
 
@@ -253,7 +356,7 @@ app.MapPut("/api/tasks/{id:int}", async (int id, UpdateTaskRequest request) =>
 .WithOpenApi(operation =>
 {
     operation.Summary = "Update task";
-    operation.Description = "Updates task fields by ID, or returns 404 if the task does not exist.";
+    operation.Description = "Updates task fields by ID after validating provided title, status, and priority values.";
     return operation;
 });
 
@@ -311,4 +414,9 @@ record UpdateTaskRequest(
     string? Description,
     string? Status,
     string? Priority
+);
+
+record ValidationErrorResponse(
+    string Error,
+    IReadOnlyList<string> Details
 );
