@@ -1,3 +1,5 @@
+using Npgsql;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
@@ -11,48 +13,108 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Disable HTTPS redirection for now because Docker/Nginx will handle routing later.
-// app.UseHttpsRedirection();
-
-var tasks = new List<TaskItem>
+string GetConnectionString()
 {
-    new TaskItem(
-        1,
-        "Set up LocalDeploy Lab",
-        "Create the first backend API endpoints",
-        "In Progress",
-        "High",
-        DateTime.UtcNow,
-        DateTime.UtcNow
-    )
-};
+    var host = Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost";
+    var port = Environment.GetEnvironmentVariable("DB_PORT") ?? "5432";
+    var database = Environment.GetEnvironmentVariable("DB_NAME") ?? "localdeploydb";
+    var username = Environment.GetEnvironmentVariable("DB_USER") ?? "localdeploy_user";
+    var password = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "localdeploy_password";
 
-var nextId = 2;
+    return $"Host={host};Port={port};Database={database};Username={username};Password={password}";
+}
 
-app.MapGet("/health", () =>
+TaskItem ReadTask(NpgsqlDataReader reader)
 {
-    return Results.Ok(new
+    return new TaskItem(
+        reader.GetInt32(reader.GetOrdinal("id")),
+        reader.GetString(reader.GetOrdinal("title")),
+        reader.IsDBNull(reader.GetOrdinal("description")) ? "" : reader.GetString(reader.GetOrdinal("description")),
+        reader.GetString(reader.GetOrdinal("status")),
+        reader.GetString(reader.GetOrdinal("priority")),
+        reader.GetDateTime(reader.GetOrdinal("created_at")),
+        reader.GetDateTime(reader.GetOrdinal("updated_at"))
+    );
+}
+
+app.MapGet("/health", async () =>
+{
+    try
     {
-        status = "running",
-        service = "localdeploy-api"
-    });
+        await using var connection = new NpgsqlConnection(GetConnectionString());
+        await connection.OpenAsync();
+
+        return Results.Ok(new
+        {
+            status = "running",
+            service = "localdeploy-api",
+            database = "connected"
+        });
+    }
+    catch
+    {
+        return Results.Ok(new
+        {
+            status = "running",
+            service = "localdeploy-api",
+            database = "disconnected"
+        });
+    }
 });
 
-app.MapGet("/api/tasks", () =>
+app.MapGet("/api/tasks", async () =>
 {
+    var tasks = new List<TaskItem>();
+
+    await using var connection = new NpgsqlConnection(GetConnectionString());
+    await connection.OpenAsync();
+
+    await using var command = new NpgsqlCommand(
+        """
+        SELECT id, title, description, status, priority, created_at, updated_at
+        FROM tasks
+        ORDER BY id;
+        """,
+        connection
+    );
+
+    await using var reader = await command.ExecuteReaderAsync();
+
+    while (await reader.ReadAsync())
+    {
+        tasks.Add(ReadTask(reader));
+    }
+
     return Results.Ok(tasks);
 });
 
-app.MapGet("/api/tasks/{id:int}", (int id) =>
+app.MapGet("/api/tasks/{id:int}", async (int id) =>
 {
-    var task = tasks.FirstOrDefault(task => task.Id == id);
+    await using var connection = new NpgsqlConnection(GetConnectionString());
+    await connection.OpenAsync();
 
-    return task is null
-        ? Results.NotFound()
-        : Results.Ok(task);
+    await using var command = new NpgsqlCommand(
+        """
+        SELECT id, title, description, status, priority, created_at, updated_at
+        FROM tasks
+        WHERE id = @id;
+        """,
+        connection
+    );
+
+    command.Parameters.AddWithValue("id", id);
+
+    await using var reader = await command.ExecuteReaderAsync();
+
+    if (!await reader.ReadAsync())
+    {
+        return Results.NotFound();
+    }
+
+    return Results.Ok(ReadTask(reader));
 });
 
-app.MapPost("/api/tasks", (CreateTaskRequest request) =>
+app.MapPost("/api/tasks", async (CreateTaskRequest request) =>
 {
     if (string.IsNullOrWhiteSpace(request.Title))
     {
@@ -62,60 +124,87 @@ app.MapPost("/api/tasks", (CreateTaskRequest request) =>
         });
     }
 
-    var now = DateTime.UtcNow;
+    await using var connection = new NpgsqlConnection(GetConnectionString());
+    await connection.OpenAsync();
 
-    var task = new TaskItem(
-        nextId++,
-        request.Title,
-        request.Description ?? "",
-        request.Status ?? "Pending",
-        request.Priority ?? "Medium",
-        now,
-        now
+    await using var command = new NpgsqlCommand(
+        """
+        INSERT INTO tasks (title, description, status, priority)
+        VALUES (@title, @description, @status, @priority)
+        RETURNING id, title, description, status, priority, created_at, updated_at;
+        """,
+        connection
     );
 
-    tasks.Add(task);
+    command.Parameters.AddWithValue("title", request.Title);
+    command.Parameters.AddWithValue("description", request.Description ?? "");
+    command.Parameters.AddWithValue("status", request.Status ?? "Pending");
+    command.Parameters.AddWithValue("priority", request.Priority ?? "Medium");
+
+    await using var reader = await command.ExecuteReaderAsync();
+    await reader.ReadAsync();
+
+    var task = ReadTask(reader);
 
     return Results.Created($"/api/tasks/{task.Id}", task);
 });
 
-app.MapPut("/api/tasks/{id:int}", (int id, UpdateTaskRequest request) =>
+app.MapPut("/api/tasks/{id:int}", async (int id, UpdateTaskRequest request) =>
 {
-    var index = tasks.FindIndex(task => task.Id == id);
+    await using var connection = new NpgsqlConnection(GetConnectionString());
+    await connection.OpenAsync();
 
-    if (index == -1)
+    await using var command = new NpgsqlCommand(
+        """
+        UPDATE tasks
+        SET
+            title = COALESCE(@title, title),
+            description = COALESCE(@description, description),
+            status = COALESCE(@status, status),
+            priority = COALESCE(@priority, priority),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = @id
+        RETURNING id, title, description, status, priority, created_at, updated_at;
+        """,
+        connection
+    );
+
+    command.Parameters.AddWithValue("id", id);
+    command.Parameters.AddWithValue("title", (object?)request.Title ?? DBNull.Value);
+    command.Parameters.AddWithValue("description", (object?)request.Description ?? DBNull.Value);
+    command.Parameters.AddWithValue("status", (object?)request.Status ?? DBNull.Value);
+    command.Parameters.AddWithValue("priority", (object?)request.Priority ?? DBNull.Value);
+
+    await using var reader = await command.ExecuteReaderAsync();
+
+    if (!await reader.ReadAsync())
     {
         return Results.NotFound();
     }
 
-    var existingTask = tasks[index];
-
-    var updatedTask = existingTask with
-    {
-        Title = request.Title ?? existingTask.Title,
-        Description = request.Description ?? existingTask.Description,
-        Status = request.Status ?? existingTask.Status,
-        Priority = request.Priority ?? existingTask.Priority,
-        UpdatedAt = DateTime.UtcNow
-    };
-
-    tasks[index] = updatedTask;
-
-    return Results.Ok(updatedTask);
+    return Results.Ok(ReadTask(reader));
 });
 
-app.MapDelete("/api/tasks/{id:int}", (int id) =>
+app.MapDelete("/api/tasks/{id:int}", async (int id) =>
 {
-    var task = tasks.FirstOrDefault(task => task.Id == id);
+    await using var connection = new NpgsqlConnection(GetConnectionString());
+    await connection.OpenAsync();
 
-    if (task is null)
-    {
-        return Results.NotFound();
-    }
+    await using var command = new NpgsqlCommand(
+        """
+        DELETE FROM tasks
+        WHERE id = @id;
+        """,
+        connection
+    );
 
-    tasks.Remove(task);
+    command.Parameters.AddWithValue("id", id);
 
-    return Results.NoContent();
+    var deletedRows = await command.ExecuteNonQueryAsync();
+
+    return deletedRows == 0
+        ? Results.NotFound()
+        : Results.NoContent();
 });
 
 app.Run();
@@ -143,3 +232,4 @@ record UpdateTaskRequest(
     string? Status,
     string? Priority
 );
+
