@@ -23,4 +23,4 @@ Thumbs.db
 *.log
 
 # Local planning docs
-docs/localdeploy_lab_*.md
+docs/guides/

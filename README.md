@@ -48,6 +48,7 @@ Nginx reverse proxy :80
 ├── backend/                 # ASP.NET Core API
 ├── database/init.sql         # PostgreSQL schema and seed data
 ├── frontend/                 # React + Vite dashboard
+├── scripts/                  # Backup and restore scripts
 ├── nginx/nginx.conf          # Reverse proxy configuration
 ├── docs/screenshots/         # Portfolio screenshots
 ├── .github/workflows/        # CI workflow
@@ -55,6 +56,15 @@ Nginx reverse proxy :80
 ├── .env.example
 └── README.md
 ```
+
+## Documentation
+
+| Document | Description |
+| --- | --- |
+| [Architecture](docs/architecture.md) | Service layout, request flow, networking, and persistence |
+| [Setup Guide](docs/setup-guide.md) | Prerequisites, environment setup, run/reset commands, and backups |
+| [API Reference](docs/api-reference.md) | Endpoint table, curl examples, validation rules, and Swagger |
+| [Troubleshooting](docs/troubleshooting.md) | Common Docker, database, backup, frontend, and CI issues |
 
 ## Run Locally
 
