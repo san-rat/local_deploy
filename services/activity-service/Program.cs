@@ -1,8 +1,32 @@
 using Npgsql;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 var logger = app.Logger;
+var dependencyUp = Metrics.CreateGauge(
+    "localdeploy_dependency_up",
+    "Whether a LocalDeploy dependency is reachable from the app service.",
+    new GaugeConfiguration
+    {
+        LabelNames = new[] { "service" }
+    }
+);
+var activityEventsRecorded = Metrics.CreateCounter(
+    "localdeploy_activity_events_recorded_total",
+    "Activity events recorded by event type.",
+    new CounterConfiguration
+    {
+        LabelNames = new[] { "event_type" }
+    }
+);
+
+dependencyUp.WithLabels("postgres").Set(0);
+
+app.UseHttpMetrics(options =>
+{
+    options.ReduceStatusCodeCardinality();
+});
 
 string GetConnectionString()
 {
@@ -19,6 +43,7 @@ async Task EnsureActivityTableAsync()
 {
     await using var connection = new NpgsqlConnection(GetConnectionString());
     await connection.OpenAsync();
+    dependencyUp.WithLabels("postgres").Set(1);
 
     await using var command = new NpgsqlCommand(
         """
@@ -80,6 +105,7 @@ app.MapGet("/health", async () =>
     {
         await using var connection = new NpgsqlConnection(GetConnectionString());
         await connection.OpenAsync();
+        dependencyUp.WithLabels("postgres").Set(1);
 
         logger.LogInformation("Activity service health check requested. Database status: {DatabaseStatus}", "connected");
 
@@ -92,6 +118,7 @@ app.MapGet("/health", async () =>
     }
     catch (Exception exception)
     {
+        dependencyUp.WithLabels("postgres").Set(0);
         logger.LogWarning(exception, "Activity service health check failed");
 
         return Results.Ok(new
@@ -103,12 +130,15 @@ app.MapGet("/health", async () =>
     }
 });
 
+app.MapMetrics("/metrics");
+
 app.MapGet("/api/activity", async () =>
 {
     var events = new List<ActivityEvent>();
 
     await using var connection = new NpgsqlConnection(GetConnectionString());
     await connection.OpenAsync();
+    dependencyUp.WithLabels("postgres").Set(1);
 
     await using var command = new NpgsqlCommand(
         """
@@ -144,6 +174,7 @@ app.MapPost("/internal/activity", async (CreateActivityEventRequest request) =>
 
     await using var connection = new NpgsqlConnection(GetConnectionString());
     await connection.OpenAsync();
+    dependencyUp.WithLabels("postgres").Set(1);
 
     await using var command = new NpgsqlCommand(
         """
@@ -163,6 +194,7 @@ app.MapPost("/internal/activity", async (CreateActivityEventRequest request) =>
     await reader.ReadAsync();
 
     var activityEvent = ReadActivityEvent(reader);
+    activityEventsRecorded.WithLabels(activityEvent.EventType).Inc();
 
     logger.LogInformation(
         "Activity event recorded. Event ID {ActivityEventId}, Type {ActivityEventType}, Task ID {TaskId}",

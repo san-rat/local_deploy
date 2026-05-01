@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Net.Http.Json;
 using Microsoft.OpenApi.Models;
 using Npgsql;
+using Prometheus;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -47,6 +48,10 @@ if (swaggerEnabled)
 }
 
 app.UseCors("LocalFrontend");
+app.UseHttpMetrics(options =>
+{
+    options.ReduceStatusCodeCardinality();
+});
 
 var logger = app.Logger;
 var redisCache = new RedisCacheConnection(GetRedisConfiguration());
@@ -55,7 +60,34 @@ var activityClient = new HttpClient
     Timeout = TimeSpan.FromSeconds(2)
 };
 var activityServiceUrl = GetActivityServiceUrl();
+var dependencyUp = Metrics.CreateGauge(
+    "localdeploy_dependency_up",
+    "Whether a LocalDeploy dependency is reachable from the app service.",
+    new GaugeConfiguration
+    {
+        LabelNames = new[] { "service" }
+    }
+);
+var taskSummaryCacheEvents = Metrics.CreateCounter(
+    "localdeploy_task_summary_cache_events_total",
+    "Task summary cache events by result.",
+    new CounterConfiguration
+    {
+        LabelNames = new[] { "result" }
+    }
+);
+var activityDeliveryEvents = Metrics.CreateCounter(
+    "localdeploy_activity_delivery_total",
+    "Best-effort activity delivery attempts by result.",
+    new CounterConfiguration
+    {
+        LabelNames = new[] { "result" }
+    }
+);
 const string TaskSummaryCacheKey = "tasks:summary";
+
+dependencyUp.WithLabels("postgres").Set(0);
+dependencyUp.WithLabels("redis").Set(0);
 
 string GetConnectionString()
 {
@@ -136,6 +168,7 @@ async Task SendActivityEventAsync(string eventType, int taskId, string taskTitle
 
         if (response.IsSuccessStatusCode)
         {
+            activityDeliveryEvents.WithLabels("success").Inc();
             logger.LogInformation(
                 "Activity event delivered. Event type {ActivityEventType}, Task ID {TaskId}",
                 eventType,
@@ -144,6 +177,7 @@ async Task SendActivityEventAsync(string eventType, int taskId, string taskTitle
             return;
         }
 
+        activityDeliveryEvents.WithLabels("failure").Inc();
         logger.LogWarning(
             "Activity event delivery failed. Event type {ActivityEventType}, Task ID {TaskId}, Status code {StatusCode}",
             eventType,
@@ -153,6 +187,7 @@ async Task SendActivityEventAsync(string eventType, int taskId, string taskTitle
     }
     catch (Exception exception)
     {
+        activityDeliveryEvents.WithLabels("failure").Inc();
         logger.LogWarning(
             "Activity event delivery failed. Event type {ActivityEventType}, Task ID {TaskId}: {ActivityError}",
             eventType,
@@ -198,6 +233,7 @@ async Task<TaskSummaryResponse> GetTaskSummaryAsync()
     {
         if (!redisCache.IsConnected)
         {
+            taskSummaryCacheEvents.WithLabels("fallback").Inc();
             logger.LogWarning("Task summary cache unavailable. Redis is disconnected. Reading summary from PostgreSQL");
             return await ReadTaskSummaryFromDatabaseAsync();
         }
@@ -211,6 +247,7 @@ async Task<TaskSummaryResponse> GetTaskSummaryAsync()
 
             if (summary is not null)
             {
+                taskSummaryCacheEvents.WithLabels("hit").Inc();
                 logger.LogInformation("Task summary cache hit");
                 return summary;
             }
@@ -219,6 +256,7 @@ async Task<TaskSummaryResponse> GetTaskSummaryAsync()
         }
 
         logger.LogInformation("Task summary cache miss");
+        taskSummaryCacheEvents.WithLabels("miss").Inc();
 
         var freshSummary = await ReadTaskSummaryFromDatabaseAsync();
 
@@ -234,6 +272,7 @@ async Task<TaskSummaryResponse> GetTaskSummaryAsync()
     }
     catch (Exception exception)
     {
+        taskSummaryCacheEvents.WithLabels("fallback").Inc();
         logger.LogWarning(
             "Task summary cache unavailable. Reading summary from PostgreSQL: {RedisError}",
             exception.Message
@@ -260,10 +299,14 @@ string GetRedisStatus()
 {
     try
     {
-        return redisCache.IsConnected ? "connected" : "disconnected";
+        var isConnected = redisCache.IsConnected;
+        dependencyUp.WithLabels("redis").Set(isConnected ? 1 : 0);
+
+        return isConnected ? "connected" : "disconnected";
     }
     catch (Exception exception)
     {
+        dependencyUp.WithLabels("redis").Set(0);
         logger.LogWarning("Redis health check failed: {RedisError}", exception.Message);
         return "disconnected";
     }
@@ -278,10 +321,12 @@ app.MapGet("/health", async () =>
     {
         await using var connection = new NpgsqlConnection(GetConnectionString());
         await connection.OpenAsync();
+        dependencyUp.WithLabels("postgres").Set(1);
     }
     catch (Exception exception)
     {
         databaseStatus = "disconnected";
+        dependencyUp.WithLabels("postgres").Set(0);
 
         logger.LogWarning(
             exception,
@@ -312,6 +357,8 @@ app.MapGet("/health", async () =>
     operation.Description = "Returns API status and whether the backend can connect to PostgreSQL and Redis.";
     return operation;
 });
+
+app.MapMetrics("/metrics");
 
 app.MapGet("/api/tasks", async () =>
 {

@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Npgsql" Version="10.0.2" />
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
   </ItemGroup>
 
 </Project>

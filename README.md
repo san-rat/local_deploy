@@ -1,8 +1,8 @@
 # LocalDeploy Lab
 
-A lightweight DevOps home lab that runs a React frontend, ASP.NET Core task API, activity service, PostgreSQL database, Redis cache, and Nginx reverse proxy with Docker Compose on Ubuntu Linux.
+A lightweight DevOps home lab that runs a React frontend, ASP.NET Core task API, activity service, PostgreSQL database, Redis cache, Nginx reverse proxy, and optional Prometheus/Grafana monitoring with Docker Compose on Ubuntu Linux.
 
-The goal is to show a small production-style full-stack system, not only an application. The browser uses one entry point, Nginx routes API traffic internally, Redis caches dashboard summary data, the activity service records task events, and PostgreSQL data persists through a Docker volume.
+The goal is to show a small production-style full-stack system, not only an application. The browser uses one entry point, Nginx routes API traffic internally, Redis caches dashboard summary data, the activity service records task events, PostgreSQL data persists through a Docker volume, and the optional monitoring profile collects metrics from both ASP.NET services.
 
 ## Architecture
 
@@ -19,6 +19,9 @@ Nginx reverse proxy :80
                          v
                     PostgreSQL database
                     Redis cache
+
+Prometheus :9090 -> backend:8080/metrics, activity-service:8081/metrics
+Grafana :3000    -> Prometheus datasource and LocalDeploy dashboard
 ```
 
 ## Tech Stack
@@ -31,6 +34,7 @@ Nginx reverse proxy :80
 | Database | PostgreSQL |
 | Cache | Redis |
 | Reverse proxy | Nginx |
+| Monitoring | Prometheus + Grafana |
 | Containers | Docker + Docker Compose |
 | CI | GitHub Actions |
 
@@ -41,6 +45,8 @@ Nginx reverse proxy :80
 - Backend health endpoint with database and Redis connectivity status
 - Redis-backed task summary cache with PostgreSQL fallback
 - Separate activity service with best-effort event delivery
+- Optional Prometheus and Grafana monitoring profile
+- Pre-provisioned Grafana dashboard for service health, HTTP metrics, cache events, and activity events
 - PostgreSQL schema initialization script
 - Persistent database volume
 - Nginx single entry point at `http://localhost`
@@ -55,6 +61,7 @@ Nginx reverse proxy :80
 ├── backend/                 # ASP.NET Core API
 ├── database/init.sql         # PostgreSQL schema and seed data
 ├── frontend/                 # React + Vite dashboard
+├── monitoring/               # Prometheus config and Grafana provisioning
 ├── services/activity-service/ # ASP.NET Core activity API
 ├── scripts/                  # Backup and restore scripts
 ├── nginx/nginx.conf          # Reverse proxy configuration
@@ -75,6 +82,7 @@ Nginx reverse proxy :80
 | [Setup Guide](docs/setup-guide.md) | Prerequisites, environment setup, run/reset commands, and backups |
 | [API Reference](docs/api-reference.md) | Endpoint table, curl examples, validation rules, and Swagger |
 | [Security Notes](docs/security-notes.md) | Production-style Compose, headers, rate limiting, and secret handling |
+| [Monitoring Guide](docs/monitoring-guide.md) | Prometheus/Grafana profile, dashboard, screenshots, and cleanup |
 | [Troubleshooting](docs/troubleshooting.md) | Common Docker, database, backup, frontend, and CI issues |
 
 ## Run Locally
@@ -134,6 +142,31 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml 
 
 Swagger is available in the development stack. It is disabled by default with the production override unless `ENABLE_SWAGGER=true` is set.
 
+## Optional Monitoring
+
+Stage V4 adds Prometheus and Grafana behind the `monitoring` Compose profile. The app still starts normally without monitoring.
+
+Start the stack with monitoring:
+
+```bash
+docker compose --profile monitoring up -d --build
+```
+
+Open:
+
+```text
+http://localhost:9090
+http://localhost:3000
+```
+
+Grafana uses `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD` from `.env.example` by default. The provisioned dashboard is named `LocalDeploy Platform`.
+
+Stop the stack when you are done testing or taking screenshots:
+
+```bash
+docker compose --profile monitoring down
+```
+
 ## Environment Variables
 
 Copy `.env.example` to `.env` if you want to customize local values:
@@ -159,6 +192,10 @@ cp .env.example .env
 | `ASPNETCORE_ENVIRONMENT` | `Development` | Backend runtime environment |
 | `ENABLE_SWAGGER` | `true` in dev, `false` in production-style mode | Enables Swagger when explicitly set |
 | `NGINX_HTTP_PORT` | `80` | Host port used by the production Compose override |
+| `PROMETHEUS_PORT` | `9090` | Host port for Prometheus when the monitoring profile is enabled |
+| `GRAFANA_PORT` | `3000` | Host port for Grafana when the monitoring profile is enabled |
+| `GRAFANA_ADMIN_USER` | `admin` | Local Grafana administrator username |
+| `GRAFANA_ADMIN_PASSWORD` | `localdeploy_admin` | Local Grafana administrator password |
 
 ## URLs
 
@@ -170,8 +207,11 @@ cp .env.example .env
 | `http://localhost/api/tasks/summary` | Redis-cached task summary counts |
 | `http://localhost/api/activity` | Recent activity events through Nginx |
 | `http://localhost/swagger` | Swagger/OpenAPI documentation |
+| `http://localhost:9090` | Prometheus UI when the monitoring profile is enabled |
+| `http://localhost:3000` | Grafana UI when the monitoring profile is enabled |
 
 The backend container listens on port `8080` internally, but it is not exposed directly to the host. Nginx is the public entry point.
+The backend and activity service expose `/metrics` only inside the Docker network for Prometheus scraping.
 
 ## API Endpoints
 
@@ -231,6 +271,8 @@ Example validation response:
 | `activity-service` | Records and lists task activity events | Internal only |
 | `redis` | Cache for task summary counts | Internal only |
 | `database` | PostgreSQL database | Internal only |
+| `prometheus` | Metrics collection for the monitoring profile | `9090` when enabled |
+| `grafana` | Metrics dashboard for the monitoring profile | `3000` when enabled |
 
 The production Compose override adds `restart: unless-stopped` to all services and keeps backend, activity-service, Redis, and database internal. See [Security Notes](docs/security-notes.md) for details.
 
@@ -249,6 +291,8 @@ docker compose logs activity-service
 docker compose logs redis
 docker compose logs database
 docker compose logs nginx
+docker compose logs prometheus
+docker compose logs grafana
 ```
 
 Follow backend logs while testing API requests:

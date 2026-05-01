@@ -103,8 +103,46 @@ services:
     networks:
       - localdeploy_network
 
+  prometheus:
+    image: prom/prometheus:v3.11.2
+    container_name: localdeploy-prometheus
+    profiles:
+      - monitoring
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      activity-service:
+        condition: service_healthy
+    networks:
+      - localdeploy_network
+
+  grafana:
+    image: grafana/grafana:13.0.1
+    container_name: localdeploy-grafana
+    profiles:
+      - monitoring
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-localdeploy_admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - localdeploy_network
+
 volumes:
   postgres_data:
+  grafana_data:
 
 networks:
   localdeploy_network:

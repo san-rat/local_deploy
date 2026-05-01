@@ -37,6 +37,8 @@ Public routes are:
 
 The internal activity write endpoint, `POST /internal/activity`, is not routed through Nginx.
 
+The internal metrics endpoints, `backend:8080/metrics` and `activity-service:8081/metrics`, are also not routed through Nginx. Prometheus scrapes them over the Compose network only when the monitoring profile is enabled.
+
 ## Redis Cache
 
 Redis caches task summary counts for the dashboard. It is an internal cache-only service with no public port and no persistent volume.
@@ -48,6 +50,22 @@ The backend deletes the `tasks:summary` cache key after successful task create, 
 The task API sends activity events to the activity service with best-effort internal HTTP calls. This avoids making task mutations depend on activity logging availability.
 
 Activity events are operational history, not a strict compliance audit log. A later stage could add a message queue or retry mechanism if stronger delivery guarantees are needed.
+
+## Monitoring
+
+Prometheus and Grafana are optional local services for learning, screenshots, and portfolio evidence:
+
+```bash
+docker compose --profile monitoring up -d --build
+```
+
+Prometheus is exposed on `localhost:9090` and Grafana on `localhost:3000` only when the profile is enabled. They are not part of the public Nginx entry point.
+
+Change `GRAFANA_ADMIN_PASSWORD` before using the monitoring profile in any shared environment. Stop the profile after testing on low-memory machines:
+
+```bash
+docker compose --profile monitoring down
+```
 
 ## Security Headers
 
@@ -99,6 +117,6 @@ These stages do not yet add:
 - Container image vulnerability scanning
 - Resource limits tuned from monitoring data
 - Redis authentication or persistence
-- Prometheus, Grafana, or cloud deployment
+- cAdvisor, node-exporter, postgres-exporter, redis-exporter, Loki, alerts, paging, or cloud deployment
 
 Those belong to later very advanced stages.

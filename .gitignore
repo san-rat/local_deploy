@@ -14,6 +14,8 @@ backend/bin/
 backend/obj/
 backend/LocalDeploy.Api.Tests/bin/
 backend/LocalDeploy.Api.Tests/obj/
+services/activity-service/bin/
+services/activity-service/obj/
 
 # OS files
 .DS_Store

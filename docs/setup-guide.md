@@ -36,6 +36,10 @@ Important defaults:
 | `ACTIVITY_SERVICE_URL` | `http://activity-service:8081` |
 | `ENABLE_SWAGGER` | `true` in dev, `false` in production-style mode |
 | `NGINX_HTTP_PORT` | `80` |
+| `PROMETHEUS_PORT` | `9090` |
+| `GRAFANA_PORT` | `3000` |
+| `GRAFANA_ADMIN_USER` | `admin` |
+| `GRAFANA_ADMIN_PASSWORD` | `localdeploy_admin` |
 
 Change password values in `.env` before using the production-style stack in any shared or deployed environment.
 
@@ -61,6 +65,38 @@ curl http://localhost/api/tasks
 curl http://localhost/api/tasks/summary
 curl http://localhost/api/activity
 curl http://localhost/swagger/v1/swagger.json
+```
+
+## Run With Monitoring
+
+Stage V4 adds Prometheus and Grafana as optional services behind the `monitoring` Compose profile. The normal app does not need them.
+
+Start the stack with monitoring:
+
+```bash
+docker compose --profile monitoring up -d --build
+```
+
+Open:
+
+```text
+http://localhost:9090
+http://localhost:3000
+```
+
+Grafana signs in with `GRAFANA_ADMIN_USER` and `GRAFANA_ADMIN_PASSWORD`. The Prometheus datasource and `LocalDeploy Platform` dashboard are provisioned automatically.
+
+Useful checks:
+
+```bash
+curl http://localhost:9090/-/ready
+curl http://localhost:3000/api/health
+```
+
+On an 8GB machine, stop Prometheus and Grafana after testing or taking screenshots:
+
+```bash
+docker compose --profile monitoring down
 ```
 
 ## Run The Production-Style Stack
@@ -112,6 +148,12 @@ For the production-style stack, use the same `-f` flags when stopping or deletin
 ```bash
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml down
 docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml down -v
+```
+
+If you started the monitoring profile, include the same profile when stopping it:
+
+```bash
+docker compose --profile monitoring down
 ```
 
 ## Local Backend Tests
@@ -172,3 +214,10 @@ curl -X POST http://localhost/api/tasks \
   -d '{"title":"Activity fallback test","priority":"Low"}'
 docker compose start activity-service
 ```
+
+## Monitoring Screenshots
+
+Suggested portfolio screenshot targets:
+
+- `docs/screenshots/grafana-dashboard.png`
+- `docs/screenshots/prometheus-targets.png`

@@ -155,3 +155,18 @@ Example response:
 ```
 
 Missing task IDs return `404 Not Found`.
+
+## Metrics
+
+Both ASP.NET services expose Prometheus metrics internally when running in Docker:
+
+```text
+backend:8080/metrics
+activity-service:8081/metrics
+```
+
+These endpoints are not routed through Nginx. Use the optional monitoring profile to scrape them:
+
+```bash
+docker compose --profile monitoring up -d --build
+```
