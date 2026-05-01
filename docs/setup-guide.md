@@ -12,6 +12,7 @@ Optional local development tools:
 
 - .NET 8 SDK for backend development and tests
 - Node.js and npm for frontend development
+- Docker can run the k6 load test without a host k6 install
 
 ## Environment
 
@@ -180,6 +181,44 @@ Restore a backup:
 
 Restore resets the current `public` schema before loading the selected backup.
 
+Verify backup and restore end to end:
+
+```bash
+./scripts/verify-restore.sh
+```
+
+Clean up old backups while keeping the newest 7:
+
+```bash
+./scripts/cleanup-backups.sh
+```
+
+Keep a custom number of backups:
+
+```bash
+./scripts/cleanup-backups.sh 14
+```
+
+See [Backup And Recovery](backup-and-recovery.md) for details.
+
+## Load Testing
+
+Run the laptop-safe k6 read test:
+
+```bash
+docker run --rm -i --add-host=host.docker.internal:host-gateway grafana/k6 run - < tests/load/localdeploy-read-load.js
+```
+
+If `host.docker.internal` does not work on your Linux Docker setup, use:
+
+```bash
+docker run --rm -i --add-host=host.docker.internal:host-gateway \
+  -e BASE_URL=http://172.17.0.1 \
+  grafana/k6 run - < tests/load/localdeploy-read-load.js
+```
+
+Record results in [Performance Results](performance-results.md).
+
 ## Redis Cache
 
 Redis caches dashboard summary counts for `60` seconds by default. The backend deletes the summary cache after successful task create, update, or delete operations.
@@ -221,3 +260,5 @@ Suggested portfolio screenshot targets:
 
 - `docs/screenshots/grafana-dashboard.png`
 - `docs/screenshots/prometheus-targets.png`
+- `docs/screenshots/restore-verification.png`
+- `docs/screenshots/k6-load-test.png`

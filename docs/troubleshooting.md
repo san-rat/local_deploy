@@ -89,6 +89,31 @@ If restore fails while loading SQL, check database logs:
 docker compose logs database
 ```
 
+If restore verification fails, run the pieces separately:
+
+```bash
+./scripts/backup-db.sh
+./scripts/restore-db.sh backups/localdeploydb_YYYYMMDD_HHMMSS.sql
+```
+
+The verification script intentionally inserts a temporary task and expects restore to remove it. If the script is interrupted after insertion, rerun `./scripts/verify-restore.sh` or restore the latest backup manually.
+
+## Backup Cleanup Does Not Remove Files
+
+The cleanup script only removes SQL files in `backups/`:
+
+```bash
+./scripts/cleanup-backups.sh
+```
+
+Use a positive integer to change the keep count:
+
+```bash
+./scripts/cleanup-backups.sh 14
+```
+
+Non-SQL files are left alone.
+
 ## Frontend Cannot Call API
 
 For the Dockerized stack, use:
@@ -147,11 +172,35 @@ curl http://localhost/api/activity
 
 The default dashboard uses a short time range. Make sure the time picker includes the last few minutes.
 
+## k6 Cannot Reach The App
+
+Make sure the stack is healthy:
+
+```bash
+docker compose up -d --build
+curl http://localhost/health
+```
+
+Run k6 with the host gateway mapping:
+
+```bash
+docker run --rm -i --add-host=host.docker.internal:host-gateway grafana/k6 run - < tests/load/localdeploy-read-load.js
+```
+
+If that still cannot connect, use the Docker bridge gateway:
+
+```bash
+docker run --rm -i --add-host=host.docker.internal:host-gateway \
+  -e BASE_URL=http://172.17.0.1 \
+  grafana/k6 run - < tests/load/localdeploy-read-load.js
+```
+
 ## GitHub Actions Fails
 
 The workflow runs backend tests, Compose validation, and Docker image builds. Common checks:
 
 - Confirm `dotnet test backend/LocalDeploy.Api.Tests/LocalDeploy.Api.Tests.csproj --configuration Release` passes locally.
+- Confirm `bash -n scripts/verify-restore.sh` and `bash -n scripts/cleanup-backups.sh` pass locally.
 - Confirm `docker compose config` passes locally.
 - Confirm `docker compose --profile monitoring config` passes locally.
 - Confirm Dockerfiles build locally with `docker compose build`.

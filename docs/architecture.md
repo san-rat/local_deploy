@@ -91,6 +91,18 @@ Redis has no persistent volume in this project because it stores cache data only
 
 The activity service creates `activity_events` with `CREATE TABLE IF NOT EXISTS` during startup, so existing local PostgreSQL volumes do not need to be reset.
 
+## Backup And Recovery
+
+Backups are created from the running PostgreSQL container with `pg_dump` and stored under local `backups/`. Restore uses `psql` to reset and reload the `public` schema from a selected SQL backup.
+
+V5 adds explicit recovery verification. The verification script creates a backup, inserts a temporary task, restores the backup, and confirms the temporary task is gone. Backup cleanup keeps the newest configured number of local SQL backups.
+
+## Load Testing
+
+V5 adds a Docker-based k6 read test. It runs outside the Compose stack and calls Nginx through the host entry point, using the same public routes a browser or API client would use.
+
+The default test is intentionally small and read-heavy. It exercises `/health`, `/api/tasks`, `/api/tasks/summary`, and `/api/activity` without changing application data.
+
 ## Health Checks
 
 Compose health checks start services in dependency order:

@@ -47,6 +47,8 @@ Grafana :3000    -> Prometheus datasource and LocalDeploy dashboard
 - Separate activity service with best-effort event delivery
 - Optional Prometheus and Grafana monitoring profile
 - Pre-provisioned Grafana dashboard for service health, HTTP metrics, cache events, and activity events
+- Repeatable PostgreSQL backup, restore verification, and backup cleanup scripts
+- Laptop-safe Docker-based k6 load test for read-heavy API traffic
 - PostgreSQL schema initialization script
 - Persistent database volume
 - Nginx single entry point at `http://localhost`
@@ -64,6 +66,7 @@ Grafana :3000    -> Prometheus datasource and LocalDeploy dashboard
 ├── monitoring/               # Prometheus config and Grafana provisioning
 ├── services/activity-service/ # ASP.NET Core activity API
 ├── scripts/                  # Backup and restore scripts
+├── tests/load/               # k6 load tests
 ├── nginx/nginx.conf          # Reverse proxy configuration
 ├── nginx/nginx.prod.conf     # Production-style reverse proxy configuration
 ├── docs/screenshots/         # Portfolio screenshots
@@ -83,6 +86,9 @@ Grafana :3000    -> Prometheus datasource and LocalDeploy dashboard
 | [API Reference](docs/api-reference.md) | Endpoint table, curl examples, validation rules, and Swagger |
 | [Security Notes](docs/security-notes.md) | Production-style Compose, headers, rate limiting, and secret handling |
 | [Monitoring Guide](docs/monitoring-guide.md) | Prometheus/Grafana profile, dashboard, screenshots, and cleanup |
+| [Backup And Recovery](docs/backup-and-recovery.md) | Backup, restore, verification, and retention commands |
+| [Load Testing](docs/load-testing.md) | Docker-based k6 usage and laptop-safe defaults |
+| [Performance Results](docs/performance-results.md) | Fill-in record for local load-test evidence |
 | [Troubleshooting](docs/troubleshooting.md) | Common Docker, database, backup, frontend, and CI issues |
 
 ## Run Locally
@@ -321,6 +327,42 @@ Restore a backup into the running database container:
 
 Restore resets the current `public` schema before loading the backup. This is destructive for the current local database state, so create a backup first if you need to keep the latest data.
 
+Verify that backup and restore works end to end:
+
+```bash
+./scripts/verify-restore.sh
+```
+
+Remove old backup files while keeping the newest 7:
+
+```bash
+./scripts/cleanup-backups.sh
+```
+
+Keep a different number of backups:
+
+```bash
+./scripts/cleanup-backups.sh 14
+```
+
+## Load Testing
+
+Run the laptop-safe k6 read test through Docker:
+
+```bash
+docker run --rm -i --add-host=host.docker.internal:host-gateway grafana/k6 run - < tests/load/localdeploy-read-load.js
+```
+
+If `host.docker.internal` does not resolve on your Linux Docker setup, run with an explicit base URL:
+
+```bash
+docker run --rm -i --add-host=host.docker.internal:host-gateway \
+  -e BASE_URL=http://172.17.0.1 \
+  grafana/k6 run - < tests/load/localdeploy-read-load.js
+```
+
+Record the local result in [Performance Results](docs/performance-results.md).
+
 ## Screenshots
 
 Add portfolio screenshots to `docs/screenshots/`:
@@ -332,12 +374,15 @@ Add portfolio screenshots to `docs/screenshots/`:
 | Health endpoint | `docs/screenshots/health-endpoint.png` |
 | Swagger API docs | `docs/screenshots/swagger-api.png` |
 | GitHub Actions passing | `docs/screenshots/github-actions.png` |
+| Restore verification | `docs/screenshots/restore-verification.png` |
+| k6 load test | `docs/screenshots/k6-load-test.png` |
 
 ## CI
 
 GitHub Actions validates the Docker setup on push and pull request:
 
 - backend validation tests with `dotnet test`
+- shell syntax validation for operational scripts
 - `docker compose config`
 - production Compose validation with `docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.prod.yml config`
 - Docker Compose service validation includes Redis and activity-service

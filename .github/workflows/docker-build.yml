@@ -25,6 +25,13 @@ jobs:
       - name: Run backend tests
         run: dotnet test backend/LocalDeploy.Api.Tests/LocalDeploy.Api.Tests.csproj --configuration Release
 
+      - name: Validate shell scripts
+        run: |
+          bash -n scripts/backup-db.sh
+          bash -n scripts/restore-db.sh
+          bash -n scripts/verify-restore.sh
+          bash -n scripts/cleanup-backups.sh
+
       - name: Validate Docker Compose file
         run: docker compose config
 
