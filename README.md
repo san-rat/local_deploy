@@ -89,6 +89,8 @@ Grafana :3000    -> Prometheus datasource and LocalDeploy dashboard
 | [Backup And Recovery](docs/backup-and-recovery.md) | Backup, restore, verification, and retention commands |
 | [Load Testing](docs/load-testing.md) | Docker-based k6 usage and laptop-safe defaults |
 | [Performance Results](docs/performance-results.md) | Fill-in record for local load-test evidence |
+| [Azure Deployment Guide](docs/deployment-guide.md) | Azure Student VM deployment with Docker Compose |
+| [Cloud Cost Notes](docs/cloud-cost-notes.md) | Student-credit cost controls and cleanup checklist |
 | [Troubleshooting](docs/troubleshooting.md) | Common Docker, database, backup, frontend, and CI issues |
 
 ## Run Locally
@@ -147,6 +149,23 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml 
 ```
 
 Swagger is available in the development stack. It is disabled by default with the production override unless `ENABLE_SWAGGER=true` is set.
+
+## Azure Student Deployment
+
+Stage V6 deploys the same production-style Compose stack to Azure using one Ubuntu VM in an Azure for Students subscription.
+
+Recommended cloud shape:
+
+```text
+Azure Portal
+Azure for Students
+Ubuntu VM
+Docker Compose
+Nginx public on port 80
+Backend, activity-service, Redis, and PostgreSQL internal to Docker
+```
+
+Start with [Azure Deployment Guide](docs/deployment-guide.md), then use [Cloud Cost Notes](docs/cloud-cost-notes.md) to keep the deployment student-credit friendly.
 
 ## Optional Monitoring
 
@@ -376,6 +395,9 @@ Add portfolio screenshots to `docs/screenshots/`:
 | GitHub Actions passing | `docs/screenshots/github-actions.png` |
 | Restore verification | `docs/screenshots/restore-verification.png` |
 | k6 load test | `docs/screenshots/k6-load-test.png` |
+| Azure VM overview | `docs/screenshots/azure-vm-overview.png` |
+| Azure public app | `docs/screenshots/azure-public-app.png` |
+| Azure health endpoint | `docs/screenshots/azure-health-endpoint.png` |
 
 ## CI
 

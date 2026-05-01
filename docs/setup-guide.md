@@ -128,6 +128,28 @@ docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml 
 
 Swagger is disabled by default in this mode. Set `ENABLE_SWAGGER=true` in `.env` only when you intentionally need Swagger for a controlled demo.
 
+## Deploy To Azure
+
+Stage V6 uses an Azure for Students subscription, one Ubuntu VM, and the existing production Compose override.
+
+Use the portal-first guide:
+
+```text
+docs/deployment-guide.md
+```
+
+Keep cost notes nearby:
+
+```text
+docs/cloud-cost-notes.md
+```
+
+Cloud deployment command on the VM:
+
+```bash
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
 ## Stop Or Reset
 
 Stop containers while keeping database data:

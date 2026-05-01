@@ -79,6 +79,12 @@ The production override keeps only Nginx public, adds restart policies, requires
 
 Prometheus and Grafana also receive restart policies through the production override when the monitoring profile is used.
 
+## Azure Deployment
+
+Stage V6 deploys the same production-style Compose runtime to one Ubuntu VM in Azure for Students. Nginx is the only public application entry point on port `80`; backend, activity-service, Redis, PostgreSQL, and metrics endpoints stay inside the Docker network on the VM.
+
+This deployment intentionally avoids Azure-managed PostgreSQL, Redis, Kubernetes, Application Gateway, and managed observability services for the first cloud stage. That keeps the deployment close to the local lab and easier to run within student credit.
+
 ## Persistence
 
 PostgreSQL data is stored in the named Docker volume `postgres_data`. Running `docker compose down` keeps the data. Running `docker compose down -v` removes it.
